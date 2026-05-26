@@ -8,7 +8,6 @@
 
 local UI = require("urhox-libs/UI")
 local C  = require("scripts/constants")
-local W  = require("scripts/widgets")
 local H  = require("scripts/helpers")
 
 local M = {}
@@ -18,15 +17,20 @@ local ACTIVE_BG  = {255, 220, 120,  35}
 local ACTIVE_BD  = {255, 170,  40, 220}
 
 -- 方形 checkbox Widget（参考图4：实色正方形，激活=橙填充）
+local sqChkCounter = 0
 local function MakeSquareCheck(active)
-    local ChkW = UI.Widget:Extend("SqChk_"..tostring(math.random(99999)))
+    sqChkCounter = sqChkCounter + 1
+    local ChkW = UI.Widget:Extend("SqChk_tr_"..sqChkCounter)
     function ChkW:Init(p)
         p = p or {}
         self.active_ = p.active or false
         p.active = nil
         UI.Widget.Init(self, p)
     end
-    function ChkW:SetActive(v) self.active_ = v; self:Invalidate() end
+    function ChkW:SetActive(v)
+        self.active_ = v
+        if self.Invalidate then self:Invalidate() end
+    end
     function ChkW:Render(nvg)
         local l = self:GetAbsoluteLayout()
         local x,y,w,h = l.x,l.y,l.w,l.h
@@ -60,13 +64,6 @@ function M.Build()
     for _, t in ipairs(C.TRAITS) do
         activeState[t.title] = (t.badge == nil)
     end
-
-    -- ── 卡头 ─────────────────────────────────────────────────────────
-    local cardHead = H.MakeCardHeader({
-        titleCN = "特性词条",
-        titleEN = "TRAITS MODULE",
-        height  = 72,
-    })
 
     -- ── 词条卡片（显式双列，避免 50%+gap 溢出） ──────────────────────
     -- 用左/右两个 flex=1 列，交替分配词条
@@ -110,26 +107,8 @@ function M.Build()
         }
 
         -- 卡片宽度 100%（相对于所在列）
-        local card = UI.Panel {
-            width="100%",
-            flexDirection="row",
-            alignItems="flex-start",
-            padding=10, gap=8,
-            borderWidth=1.5, borderColor=bdC,
-            backgroundColor=bgC,
-            borderRadius=4,
-        }
-
-        local content = UI.Panel {
-            flex=1, flexShrink=1, flexDirection="column",
-            children={ titleLbl, infoRow, descLbl }
-        }
-
-        card:AddChild(chkW)
-        card:AddChild(content)
-
-        -- 点击切换
-        card.onClick = function()
+        local card
+        local function onCardClick()
             isActive = not isActive
             activeState[t.title] = isActive
             chkW:SetActive(isActive)
@@ -138,6 +117,23 @@ function M.Build()
             card:SetProp("borderColor", nb)
             card:SetProp("backgroundColor", bb)
         end
+
+        local content = UI.Panel {
+            flex=1, flexShrink=1, flexDirection="column",
+            children={ titleLbl, infoRow, descLbl }
+        }
+
+        card = UI.Panel {
+            width="100%",
+            flexDirection="row",
+            alignItems="flex-start",
+            padding=10, gap=8,
+            borderWidth=1.5, borderColor=bdC,
+            backgroundColor=bgC,
+            borderRadius=4,
+            onClick=onCardClick,
+            children={ chkW, content },
+        }
 
         -- 奇数 → 左列，偶数 → 右列
         if idx % 2 == 1 then
@@ -153,34 +149,10 @@ function M.Build()
         children={ leftCol, rightCol }
     }
 
-    -- ── 卡体 ──────────────────────────────────────────────────────────
-    local BodyBg = UI.Widget:Extend("TraitsBody_tr")
-    function BodyBg:Init(p) UI.Widget.Init(self, p) end
-    function BodyBg:Render(nvg)
-        local l = self:GetAbsoluteLayout()
-        local x,y,w,h = l.x,l.y,l.w,l.h
-        nvgBeginPath(nvg); nvgRect(nvg,x,y,w,h)
-        nvgFillColor(nvg,nvgRGBAf(C.BODY_BG[1]/255,C.BODY_BG[2]/255,C.BODY_BG[3]/255,1))
-        nvgFill(nvg)
-        for dy=10,h,18 do for dx=10,w,18 do
-            nvgBeginPath(nvg); nvgCircle(nvg,x+dx,y+dy,1.0)
-            nvgFillColor(nvg,nvgRGBAf(C.GRAPHITE[1]/255,C.GRAPHITE[2]/255,C.GRAPHITE[3]/255,0.10))
-            nvgFill(nvg)
-        end end
-    end
-
-    local cardBody = BodyBg:new({
-        width="100%", padding=18,
-        flexDirection="column",
-        children={ grid }
-    })
-
-    return W.SurfacePanel:new({
-        width="100%", marginBottom=12,
-        flexDirection="column",
-        fillC=C.CARD_BG, strokeC=C.GRAPHITE,
-        cut=24, shadow=true, padding=0, overflow="hidden",
-        children={ cardHead, cardBody }
+    return H.MakeCard({
+        titleCN  = "特性词条",
+        titleEN  = "TRAITS MODULE",
+        children = { grid },
     })
 end
 

@@ -1,0 +1,493 @@
+[
+  {
+    "name": "app",
+    "selector": ".wiki-detail-app",
+    "exists": true,
+    "tag": "section",
+    "className": "wiki-detail-app rank-s",
+    "text": "◀ 返回上一页 收起 来源详细 读取存档数据 星魅 ｜ 当前为数据预览状态（未读取存档） S 星魅 改装 RANK S + 涡轮 + 电控 + 减震 + 轮胎 SKINS / 涂装 外观图鉴 展开 ◀ 默认涂装 已拥有 活力黄 未拥有 竞速 未拥有 ▶ 性能评估 PERFORMANCE 综合性能594 按真实数值计算，显示可能存在±1点误差 起步 130+24 (+22.64%) 加速度 151+39 (+34.82%) 最高时速 115+24 (+26.37%) 操控 128+24 (+23.08%) 氮气强度 10 氮气时长 10 漂移 30 越野 10 抓地 10 构筑调校 ECU TU",
+    "box": {
+      "x": 277,
+      "y": 144,
+      "width": 1134,
+      "height": 1311
+    },
+    "computed": {
+      "display": "block",
+      "position": "relative",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "8px",
+      "margin": "0px",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "name": "topbarShell",
+    "selector": ".detail-topbar-shell",
+    "exists": true,
+    "tag": "section",
+    "className": "detail-topbar-shell",
+    "text": "◀ 返回上一页 收起 来源详细 读取存档数据 星魅 ｜ 当前为数据预览状态（未读取存档）",
+    "box": {
+      "x": 285,
+      "y": 172,
+      "width": 1118,
+      "height": 60
+    },
+    "computed": {
+      "display": "block",
+      "position": "sticky",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "0px",
+      "margin": "0px 0px 16px",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "70"
+    }
+  },
+  {
+    "name": "topbar",
+    "selector": ".detail-topbar",
+    "exists": true,
+    "tag": "header",
+    "className": "detail-topbar hs-ui-surface",
+    "text": "◀ 返回上一页 收起 来源详细 读取存档数据 星魅 ｜ 当前为数据预览状态（未读取存档）",
+    "box": {
+      "x": 285,
+      "y": 172,
+      "width": 1118,
+      "height": 60
+    },
+    "computed": {
+      "display": "flex",
+      "position": "relative",
+      "gridTemplateColumns": "none",
+      "gap": "12px",
+      "padding": "10px 14px",
+      "margin": "0px",
+      "background": "rgb(255, 255, 255) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "2px solid rgb(29, 42, 56)",
+      "boxShadow": "rgba(29, 42, 56, 0.25) 6px 6px 0px 0px",
+      "clipPath": "polygon(0px 0px, calc(100% - 24px) 0px, 100% 24px, 100% 100%, 0px 100%)",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "name": "detailGrid",
+    "selector": ".detail-grid",
+    "exists": true,
+    "tag": "div",
+    "className": "detail-grid",
+    "text": "S 星魅 改装 RANK S + 涡轮 + 电控 + 减震 + 轮胎 SKINS / 涂装 外观图鉴 展开 ◀ 默认涂装 已拥有 活力黄 未拥有 竞速 未拥有 ▶ 性能评估 PERFORMANCE 综合性能594 按真实数值计算，显示可能存在±1点误差 起步 130+24 (+22.64%) 加速度 151+39 (+34.82%) 最高时速 115+24 (+26.37%) 操控 128+24 (+23.08%) 氮气强度 10 氮气时长 10 漂移 30 越野 10 抓地 10 构筑调校 ECU TUNING 阶级 RANK S SS SSS 等级 LEVEL 1 快捷预设 满阶性能（SS",
+    "box": {
+      "x": 285,
+      "y": 228,
+      "width": 1118,
+      "height": 1219
+    },
+    "computed": {
+      "display": "grid",
+      "position": "static",
+      "gridTemplateColumns": "420px 668px",
+      "gap": "30px",
+      "padding": "0px",
+      "margin": "0px",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "name": "showcase",
+    "selector": ".area-showcase",
+    "exists": true,
+    "tag": "aside",
+    "className": "area-showcase",
+    "text": "S 星魅 改装 RANK S + 涡轮 + 电控 + 减震 + 轮胎 SKINS / 涂装 外观图鉴 展开 ◀ 默认涂装 已拥有 活力黄 未拥有 竞速 未拥有 ▶",
+    "box": {
+      "x": 285,
+      "y": 228,
+      "width": 420,
+      "height": 685
+    },
+    "computed": {
+      "display": "flex",
+      "position": "sticky",
+      "gridTemplateColumns": "none",
+      "gap": "20px",
+      "padding": "0px",
+      "margin": "0px",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "name": "mediaPanel",
+    "selector": ".media-panel",
+    "exists": true,
+    "tag": "section",
+    "className": "media-panel hs-ui-surface rank-v-s",
+    "text": "S 星魅 改装 RANK S + 涡轮 + 电控 + 减震 + 轮胎",
+    "box": {
+      "x": 285,
+      "y": 228,
+      "width": 420,
+      "height": 480
+    },
+    "computed": {
+      "display": "flex",
+      "position": "relative",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "0px",
+      "margin": "0px",
+      "background": "rgb(255, 255, 255) url(\"https://static.seimu.cn/ui/Tier4.png\") repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "2px solid rgb(29, 42, 56)",
+      "boxShadow": "rgba(29, 42, 56, 0.25) 6px 6px 0px 0px",
+      "clipPath": "polygon(0px 0px, calc(100% - 24px) 0px, 100% 24px, 100% 100%, 0px 100%)",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "name": "carStage",
+    "selector": ".car-stage",
+    "exists": true,
+    "tag": "div",
+    "className": "car-stage",
+    "text": "",
+    "box": {
+      "x": 287,
+      "y": 230,
+      "width": 416,
+      "height": 301
+    },
+    "computed": {
+      "display": "flex",
+      "position": "relative",
+      "gridTemplateColumns": "none",
+      "gap": "14px",
+      "padding": "20px 12px 20px 20px",
+      "margin": "0px",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "2"
+    }
+  },
+  {
+    "name": "carImage",
+    "selector": ".car-img",
+    "exists": true,
+    "tag": "img",
+    "className": "car-img",
+    "text": "",
+    "box": {
+      "x": 315,
+      "y": 275,
+      "width": 353,
+      "height": 228
+    },
+    "computed": {
+      "display": "block",
+      "position": "relative",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "0px",
+      "margin": "0px",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "2"
+    }
+  },
+  {
+    "name": "infoHeader",
+    "selector": ".info-header",
+    "exists": true,
+    "tag": "div",
+    "className": "info-header",
+    "text": "星魅 改装 RANK S + 涡轮 + 电控 + 减震 + 轮胎",
+    "box": {
+      "x": 287,
+      "y": 531,
+      "width": 416,
+      "height": 175
+    },
+    "computed": {
+      "display": "block",
+      "position": "relative",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "20px",
+      "margin": "0px",
+      "background": "rgba(0, 0, 0, 0) linear-gradient(110deg, rgb(24, 37, 53), rgb(30, 44, 62) 65%, rgb(37, 54, 75)) repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "",
+      "boxShadow": "none",
+      "clipPath": "polygon(0px 0px, 100% 15px, 100% 100%, 0px 100%)",
+      "zIndex": "3"
+    }
+  },
+  {
+    "name": "partQuad",
+    "selector": ".parts-quad",
+    "exists": true,
+    "tag": "div",
+    "className": "parts-quad",
+    "text": "+ 涡轮 + 电控 + 减震 + 轮胎",
+    "box": {
+      "x": 571,
+      "y": 554,
+      "width": 110,
+      "height": 132
+    },
+    "computed": {
+      "display": "grid",
+      "position": "relative",
+      "gridTemplateColumns": "48px 48px",
+      "gap": "10px",
+      "padding": "2px 2px 0px",
+      "margin": "0px",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(255, 255, 255)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "1"
+    }
+  },
+  {
+    "name": "skinsPanel",
+    "selector": ".skins-panel",
+    "exists": true,
+    "tag": "section",
+    "className": "skins-panel hs-ui-surface",
+    "text": "SKINS / 涂装 外观图鉴 展开 ◀ 默认涂装 已拥有 活力黄 未拥有 竞速 未拥有 ▶",
+    "box": {
+      "x": 285,
+      "y": 728,
+      "width": 420,
+      "height": 185
+    },
+    "computed": {
+      "display": "block",
+      "position": "relative",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "20px",
+      "margin": "0px",
+      "background": "rgb(255, 255, 255) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "2px solid rgb(29, 42, 56)",
+      "boxShadow": "rgba(29, 42, 56, 0.25) 6px 6px 0px 0px",
+      "clipPath": "polygon(0px 0px, calc(100% - 24px) 0px, 100% 24px, 100% 100%, 0px 100%)",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "name": "skinsGrid",
+    "selector": ".skins-grid",
+    "exists": true,
+    "tag": "div",
+    "className": "skins-grid is-collapsed",
+    "text": "默认涂装 已拥有 活力黄 未拥有 竞速 未拥有",
+    "box": {
+      "x": 343,
+      "y": 823,
+      "width": 530,
+      "height": 68
+    },
+    "computed": {
+      "display": "flex",
+      "position": "static",
+      "gridTemplateColumns": "repeat(2, 1fr)",
+      "gap": "10px",
+      "padding": "0px",
+      "margin": "0px",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "name": "performancePanel",
+    "selector": ".perf-panel",
+    "exists": true,
+    "tag": "section",
+    "className": "perf-panel hs-ui-surface data-card",
+    "text": "性能评估 PERFORMANCE 综合性能594 按真实数值计算，显示可能存在±1点误差 起步 130+24 (+22.64%) 加速度 151+39 (+34.82%) 最高时速 115+24 (+26.37%) 操控 128+24 (+23.08%) 氮气强度 10 氮气时长 10 漂移 30 越野 10 抓地 10",
+    "box": {
+      "x": 735,
+      "y": 228,
+      "width": 668,
+      "height": 352
+    },
+    "computed": {
+      "display": "block",
+      "position": "relative",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "0px",
+      "margin": "0px",
+      "background": "rgb(255, 255, 255) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "2px solid rgb(29, 42, 56)",
+      "boxShadow": "rgba(29, 42, 56, 0.25) 6px 6px 0px 0px",
+      "clipPath": "polygon(0px 0px, calc(100% - 24px) 0px, 100% 24px, 100% 100%, 0px 100%)",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "name": "statsGrid",
+    "selector": ".stats-grid",
+    "exists": true,
+    "tag": "div",
+    "className": "stats-grid",
+    "text": "起步 130+24 (+22.64%) 加速度 151+39 (+34.82%) 最高时速 115+24 (+26.37%) 操控 128+24 (+23.08%) 氮气强度 10 氮气时长 10 漂移 30 越野 10 抓地 10",
+    "box": {
+      "x": 759,
+      "y": 362,
+      "width": 620,
+      "height": 194
+    },
+    "computed": {
+      "display": "grid",
+      "position": "relative",
+      "gridTemplateColumns": "295px 295px",
+      "gap": "24px 30px",
+      "padding": "0px",
+      "margin": "0px",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "1"
+    }
+  },
+  {
+    "name": "tuningPanel",
+    "selector": ".config-panel--tuning",
+    "exists": true,
+    "tag": "section",
+    "className": "config-panel config-panel--tuning hs-ui-surface data-card",
+    "text": "构筑调校 ECU TUNING 阶级 RANK S SS SSS 等级 LEVEL 1 快捷预设 满阶性能（SSS / Lv30 / 全特性 / 无皮肤） 车库同步 读取当前车存档参数 携带皮肤加成 按涂装规则计入属性 未启用：不计入涂装额外属性（用于纯车体对比）",
+    "box": {
+      "x": 735,
+      "y": 604,
+      "width": 668,
+      "height": 448
+    },
+    "computed": {
+      "display": "block",
+      "position": "relative",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "0px",
+      "margin": "0px",
+      "background": "rgb(255, 255, 255) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "2px solid rgb(29, 42, 56)",
+      "boxShadow": "rgba(29, 42, 56, 0.25) 6px 6px 0px 0px",
+      "clipPath": "polygon(0px 0px, calc(100% - 24px) 0px, 100% 24px, 100% 100%, 0px 100%)",
+      "zIndex": "auto"
+    }
+  },
+  {
+    "name": "traitsPanel",
+    "selector": ".traits-grid",
+    "exists": true,
+    "tag": "div",
+    "className": "traits-grid",
+    "text": "氮气触发 [基础特性] 解锁: C档 当在漂移时，氮气触发 漂移+15 [基础特性] 解锁: B档 漂移+15 加速度+24% [基础特性] 解锁: A档 需求未达标，不计入面板 漂移大于等于32时，加速度+24% 操控+24% [基础特性] 解锁: S档 局内生效，不计入面板 当在漂移时，操控+24%",
+    "box": {
+      "x": 759,
+      "y": 1189,
+      "width": 620,
+      "height": 210
+    },
+    "computed": {
+      "display": "grid",
+      "position": "relative",
+      "gridTemplateColumns": "304px 304px",
+      "gap": "12px",
+      "padding": "0px",
+      "margin": "0px 0px 24px",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "1"
+    }
+  },
+  {
+    "name": "drawerPanel",
+    "selector": ".drawer-panel",
+    "exists": true,
+    "tag": "aside",
+    "className": "drawer-panel",
+    "text": "数据来源拆解明细 DECONSTRUCTION X 基础值 BASE +468 / 0% 起步 +106 baseMax/baseMaxMetaFull 加速度 +112 baseMax/baseMaxMetaFull 最高时速 +91 baseMax/baseMaxMetaFull 操控 +104 baseMax/baseMaxMetaFull 漂移 +15 baseMax/baseMaxMetaFull 抓地 +10 baseMax/baseMaxMetaFull 越野 +10 baseMax/baseMaxMetaFull 氮气时长 +10 baseMax/baseMaxMetaFull",
+    "box": {
+      "x": 1440,
+      "y": 0,
+      "width": 480,
+      "height": 1000
+    },
+    "computed": {
+      "display": "flex",
+      "position": "fixed",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "0px",
+      "margin": "0px",
+      "background": "rgb(244, 247, 250) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "rgba(0, 0, 0, 0.2) -10px 0px 40px 0px",
+      "clipPath": "none",
+      "zIndex": "1001"
+    }
+  },
+  {
+    "name": "partModalOverlay",
+    "selector": ".part-modal-overlay",
+    "exists": true,
+    "tag": "div",
+    "className": "part-modal-overlay hs-ui-modal-overlay",
+    "text": "",
+    "box": {
+      "x": 0,
+      "y": 0,
+      "width": 1440,
+      "height": 1000
+    },
+    "computed": {
+      "display": "flex",
+      "position": "fixed",
+      "gridTemplateColumns": "none",
+      "gap": "normal",
+      "padding": "20px",
+      "margin": "0px",
+      "background": "rgba(18, 26, 36, 0.85) none repeat scroll 0% 0% / auto padding-box border-box",
+      "border": "0px none rgb(26, 40, 56)",
+      "boxShadow": "none",
+      "clipPath": "none",
+      "zIndex": "2000"
+    }
+  },
+  {
+    "name": "loadingPanelRuntime",
+    "selector": ".loading-panel",
+    "exists": false
+  }
+]

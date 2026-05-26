@@ -255,8 +255,10 @@ function M.Build(slotKey, onClose, onEquip)
                                         },
                                     }
                                 },
-                                -- 右侧状态/按钮
+                                -- 右侧状态/按钮（固定宽度，不被压缩）
                                 UI.Panel {
+                                    width = 72,
+                                    flexShrink = 0,
                                     flexDirection = "column",
                                     alignItems = "flex-end",
                                     justifyContent = "center",
@@ -302,8 +304,9 @@ function M.Build(slotKey, onClose, onEquip)
     listPanel = UI.Panel { width = "100%", flexDirection = "column" }
     local scrollArea = UI.ScrollView {
         width = "100%",
-        height = 280,
+        height = 360,
         flexDirection = "column",
+        showScrollbar = false,
         children = { listPanel },
     }
     RefreshList()
@@ -331,7 +334,7 @@ function M.Build(slotKey, onClose, onEquip)
         onClick = function() if onClose then onClose() end end,
     })
 
-    -- ── 弹窗 Header（NanoVG 背景绘制，含双行文字） ───────────────
+    -- ── 弹窗 Header（NanoVG 绘制全部内容，高度 90 保证两行间距） ──
     local ModalHeadBg = UI.Widget:Extend("ModalHeadBg_pm4")
     function ModalHeadBg:Init(p)
         self.slotLabel_ = p.slotLabel or ""
@@ -341,41 +344,44 @@ function M.Build(slotKey, onClose, onEquip)
     function ModalHeadBg:Render(nvg)
         local l = self:GetAbsoluteLayout()
         local x, y, w, h = l.x, l.y, l.w, l.h
+        local dpr = graphics:GetDPR()
         -- 深色背景
         nvgBeginPath(nvg); nvgRect(nvg, x, y, w, h)
         nvgFillColor(nvg, nvgRGBAf(24/255, 37/255, 53/255, 1)); nvgFill(nvg)
-        -- 点阵装饰
-        for dy = 6, h, 14 do
-            for dx = 6, w, 14 do
-                nvgBeginPath(nvg); nvgCircle(nvg, x+dx, y+dy, 0.9)
+        -- 点阵装饰（步距随 DPR 缩放）
+        local step = 14 * dpr
+        for dy = 6*dpr, h, step do
+            for dx = 6*dpr, w, step do
+                nvgBeginPath(nvg); nvgCircle(nvg, x+dx, y+dy, 0.9*dpr)
                 nvgFillColor(nvg, nvgRGBAf(1, 1, 1, 0.12)); nvgFill(nvg)
             end
         end
         -- 底部金色线
-        nvgBeginPath(nvg); nvgRect(nvg, x, y+h-3, w, 3)
+        local lineH = 3 * dpr
+        nvgBeginPath(nvg); nvgRect(nvg, x, y+h-lineH, w, lineH)
         nvgFillColor(nvg, nvgRGBAf(255/255, 226/255, 58/255, 1)); nvgFill(nvg)
-        -- 第一行：斜体英文主标题（上移到约 y+30）
+        -- 第一行：PARTS INVENTORY（斜体，垂直居 33% 处）
+        -- 用 h 的百分比定位，DPR 无关
         nvgSave(nvg)
-        nvgTranslate(nvg, x+20, y+26)
+        nvgTranslate(nvg, x + 20*dpr, y + h * 0.33)
         nvgSkewX(nvg, -0.20)
         nvgFontFace(nvg, UI.Theme.FontFace("barlow", "black"))
         nvgFontSize(nvg, UI.Theme.FontSize(20))
         nvgFillColor(nvg, nvgRGBAf(1, 1, 1, 1))
-        nvgTextAlign(nvg, 1|8)
+        nvgTextAlign(nvg, 1|8)   -- LEFT | MIDDLE
         nvgText(nvg, 0, 0, "PARTS INVENTORY")
         nvgRestore(nvg)
-        -- 第二行：中文副标题（金色，y+58，普通字体）
+        -- 第二行：中文副标题（垂直居 72% 处）
         nvgFontFace(nvg, UI.Theme.FontFace("sans", "bold"))
         nvgFontSize(nvg, UI.Theme.FontSize(12))
-        nvgFillColor(nvg, nvgRGBAf(255/255, 212/255, 60/255, 0.90))
-        nvgTextAlign(nvg, 1|8)
-        nvgText(nvg, x+20, y+58, "选择装配的  [ " .. self.slotLabel_ .. " ]")
+        nvgFillColor(nvg, nvgRGBAf(255/255, 208/255, 58/255, 0.85))
+        nvgTextAlign(nvg, 1|8)   -- LEFT | MIDDLE
+        nvgText(nvg, x + 20*dpr, y + h * 0.63, "选择装配的  [ " .. self.slotLabel_ .. " ]")
     end
 
-    -- Header 高度升至 80，容纳双行文字
     local modalHead = UI.Panel {
         width = "100%",
-        height = 80,
+        height = 90,
         children = {
             ModalHeadBg:new({
                 position = "absolute", top = 0, left = 0,
@@ -384,7 +390,7 @@ function M.Build(slotKey, onClose, onEquip)
             }),
             UI.Panel {
                 position = "absolute", top = 0, right = 0,
-                width = 50, height = 80,
+                width = 50, height = 90,
                 justifyContent = "center", alignItems = "center",
                 children = { closeBtn },
             },
@@ -439,7 +445,7 @@ function M.Build(slotKey, onClose, onEquip)
         children = { modalContent },
     }
 
-    return overlay
+    return overlay, modalContent
 end
 
 -- BuildSlots 已废弃，保留空实现防止旧引用出错

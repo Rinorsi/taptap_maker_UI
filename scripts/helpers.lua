@@ -14,28 +14,59 @@ function M.MakeCardHeader(opts)
     opts = opts or {}
     local hh = opts.height or 72
 
-    -- 背景层（点阵渐变 + 金色底边）—— 纯 NanoVG，不含文字
+    -- 背景层（点阵渐变 + 金色底边 + 可选右侧 NanoVG 分数）
+    -- cut_：右上折角大小，与外层 SurfacePanel 保持一致（默认24px）
     local BgW = UI.Widget:Extend("CardHBg_" .. (opts.titleEN or "x"):gsub("%s",""))
+    local scoreGetter_ = opts.scoreGetter  -- 闭包保存，Render 时调用
+    local bgCut_ = opts.cut or 24           -- 折角尺寸，与外层 SurfacePanel.cut 一致
     function BgW:Init(p) UI.Widget.Init(self, p) end
     function BgW:Render(nvg)
         local l = self:GetAbsoluteLayout()
         local x,y,w,h = l.x,l.y,l.w,l.h
-        -- 渐变背景
+        local cut = bgCut_
+        -- 渐变背景（折角多边形，与外层 SurfacePanel 对齐）
         local g = nvgLinearGradient(nvg, x, y, x+w*0.7, y+h,
             nvgRGBAf(24/255, 37/255, 53/255, 1),
             nvgRGBAf(37/255, 55/255, 78/255, 1))
-        nvgBeginPath(nvg); nvgRect(nvg, x, y, w, h)
+        nvgBeginPath(nvg)
+        nvgMoveTo(nvg, x,       y)
+        nvgLineTo(nvg, x+w-cut, y)
+        nvgLineTo(nvg, x+w,     y+cut)
+        nvgLineTo(nvg, x+w,     y+h)
+        nvgLineTo(nvg, x,       y+h)
+        nvgClosePath(nvg)
         nvgFillPaint(nvg, g); nvgFill(nvg)
-        -- 点阵纹理
+        -- 点阵纹理（跳过右上折角三角区）
         for dy = 8, h, 16 do
             for dx = 8, w, 16 do
-                nvgBeginPath(nvg); nvgCircle(nvg, x+dx, y+dy, 1.0)
-                nvgFillColor(nvg, nvgRGBAf(0.6, 0.72, 0.82, 0.40)); nvgFill(nvg)
+                if not (dx > w - cut and dy < cut and dy < dx - (w - cut)) then
+                    nvgBeginPath(nvg); nvgCircle(nvg, x+dx, y+dy, 1.0)
+                    nvgFillColor(nvg, nvgRGBAf(0.6, 0.72, 0.82, 0.40)); nvgFill(nvg)
+                end
             end
         end
         -- 金色底边条 (4px)
         nvgBeginPath(nvg); nvgRect(nvg, x, y+h-4, w, 4)
         nvgFillColor(nvg, nvgRGBAf(255/255, 226/255, 58/255, 1)); nvgFill(nvg)
+        -- 右侧综合分数（仅当传入 scoreGetter 时绘制）
+        if scoreGetter_ then
+            local scoreStr = scoreGetter_()
+            -- NanoVG 文字对齐：右对齐+垂直居中 = 4(RIGHT)+16(MIDDLE) = 20
+            local ALIGN_RM = 4 + 16
+            -- "综合性能" 小标签
+            nvgFontFace(nvg, "sans-bold")
+            nvgFontSize(nvg, 10)
+            nvgTextAlign(nvg, ALIGN_RM)
+            nvgFillColor(nvg, nvgRGBAf(133/255, 161/255, 189/255, 1))
+            -- 右侧留 32px 边距（折角 cut=24px 再加 8px 安全距离）
+            nvgText(nvg, x+w-32, y + h*0.28, "综合性能")
+            -- 大数字（Teko Bold）
+            nvgFontFace(nvg, "teko-bold")
+            nvgFontSize(nvg, 44)
+            nvgTextAlign(nvg, ALIGN_RM)
+            nvgFillColor(nvg, nvgRGBAf(1, 1, 1, 1))
+            nvgText(nvg, x+w-32, y + h*0.68, scoreStr)
+        end
     end
 
     -- 前景文字区（Yoga Label，绝对定位覆盖背景）
@@ -63,7 +94,7 @@ function M.MakeCardHeader(opts)
     -- 右侧自定义控件
     if opts.rightWidget then
         table.insert(fgChildren, opts.rightWidget)
-        table.insert(fgChildren, UI.Panel { width=12 })  -- 右边距
+        table.insert(fgChildren, UI.Panel { width=28 })  -- 右边距（让过折角 cut 24px）
     end
 
     return UI.Panel {
@@ -194,6 +225,77 @@ function M.MakeCheckIcon(opts)
         borderC=opts.borderC or C.GRAPHITE,
         fillC=opts.fillC or C.THEME_S,
         checkC=opts.checkC or C.GRAPHITE,
+    })
+end
+
+-- ============================================================
+-- MakeCardBody: 统一的浅灰点阵背景卡体
+-- opts: { padding, paddingTop, children }
+-- ============================================================
+local _BodyBg = UI.Widget:Extend("SharedBodyBg_helpers")
+function _BodyBg:Init(p) UI.Widget.Init(self, p) end
+function _BodyBg:Render(nvg)
+    local l = self:GetAbsoluteLayout()
+    local x,y,w,h = l.x,l.y,l.w,l.h
+    nvgBeginPath(nvg); nvgRect(nvg,x,y,w,h)
+    nvgFillColor(nvg,nvgRGBAf(C.BODY_BG[1]/255,C.BODY_BG[2]/255,C.BODY_BG[3]/255,1))
+    nvgFill(nvg)
+    for dy=10,h,18 do for dx=10,w,18 do
+        nvgBeginPath(nvg); nvgCircle(nvg,x+dx,y+dy,1.0)
+        nvgFillColor(nvg,nvgRGBAf(C.GRAPHITE[1]/255,C.GRAPHITE[2]/255,C.GRAPHITE[3]/255,0.11))
+        nvgFill(nvg)
+    end end
+end
+
+function M.MakeCardBody(opts)
+    opts = opts or {}
+    local p = {
+        width      = "100%",
+        flexDirection = "column",
+        padding    = opts.padding    or 18,
+        paddingTop = opts.paddingTop or opts.padding or 18,
+    }
+    if opts.children then
+        p.children = opts.children
+    end
+    return _BodyBg:new(p)
+end
+
+-- ============================================================
+-- MakeCard: SurfacePanel + MakeCardHeader + MakeCardBody 一体化工厂
+-- opts: {
+--   titleCN, titleEN, headHeight, cut,
+--   scoreGetter, rightWidget,        ← 透传给 MakeCardHeader
+--   padding, paddingTop, children,   ← 透传给 MakeCardBody
+--   marginBottom,                    ← 卡片下间距（默认12）
+-- }
+-- ============================================================
+function M.MakeCard(opts)
+    opts = opts or {}
+    local head = M.MakeCardHeader({
+        titleCN     = opts.titleCN,
+        titleEN     = opts.titleEN,
+        height      = opts.headHeight or 72,
+        cut         = opts.cut or 24,
+        scoreGetter = opts.scoreGetter,
+        rightWidget = opts.rightWidget,
+    })
+    local body = M.MakeCardBody({
+        padding    = opts.padding,
+        paddingTop = opts.paddingTop,
+        children   = opts.children,
+    })
+    return require("scripts/widgets").SurfacePanel:new({
+        width        = "100%",
+        marginBottom = opts.marginBottom or 12,
+        flexDirection = "column",
+        fillC   = C.CARD_BG,
+        strokeC = C.GRAPHITE,
+        cut     = opts.cut or 24,
+        shadow  = true,
+        padding = 0,
+        overflow = "hidden",
+        children = { head, body },
     })
 end
 

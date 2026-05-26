@@ -5,27 +5,10 @@
 
 local UI    = require("urhox-libs/UI")
 local C     = require("scripts/constants")
-local W     = require("scripts/widgets")
 local H     = require("scripts/helpers")
 local State = require("scripts/state")
 
 local M = {}
-
--- ── BodyBg：与 performance.lua 统一的浅底点阵背景 ─────────────────
-local PartsBodyBg = UI.Widget:Extend("PartsBodyBg_pq")
-function PartsBodyBg:Init(p) UI.Widget.Init(self, p) end
-function PartsBodyBg:Render(nvg)
-    local l = self:GetAbsoluteLayout()
-    local x, y, w, h = l.x, l.y, l.w, l.h
-    nvgBeginPath(nvg); nvgRect(nvg, x, y, w, h)
-    nvgFillColor(nvg, nvgRGBAf(244/255, 247/255, 250/255, 1)); nvgFill(nvg)
-    for dy = 8, h, 16 do
-        for dx = 8, w, 16 do
-            nvgBeginPath(nvg); nvgCircle(nvg, x+dx, y+dy, 1.0)
-            nvgFillColor(nvg, nvgRGBAf(0.69, 0.76, 0.84, 0.35)); nvgFill(nvg)
-        end
-    end
-end
 
 -- ── 品阶徽章（NanoVG 圆形）────────────────────────────────────────
 -- 必须定义在工厂函数外部，避免每次 Build 重复注册类名
@@ -223,19 +206,6 @@ function M.Build(opts)
         children = { slotItems[3].container, slotItems[4].container }
     }
 
-    local cardBody = PartsBodyBg:new({
-        width = "100%",
-        flexDirection = "column",
-        padding = 12,
-        children = { row1, row2 }
-    })
-
-    local cardHead = H.MakeCardHeader({
-        titleCN = "零件配装",
-        titleEN = "EQUIPPED PARTS",
-        height  = 72,
-    })
-
     -- 注册响应式刷新
     State.OnRefresh(function()
         for _, si in ipairs(slotItems) do
@@ -243,12 +213,11 @@ function M.Build(opts)
         end
     end)
 
-    return W.SurfacePanel:new({
-        width = "100%", marginBottom = 12,
-        flexDirection = "column",
-        fillC = C.CARD_BG, strokeC = C.GRAPHITE,
-        cut = 24, shadow = true, padding = 0, overflow = "hidden",
-        children = { cardHead, cardBody }
+    return H.MakeCard({
+        titleCN  = "零件配装",
+        titleEN  = "EQUIPPED PARTS",
+        padding  = 12,
+        children = { row1, row2 },
     })
 end
 

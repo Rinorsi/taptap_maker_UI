@@ -1,0 +1,23 @@
+# 构建产物
+.build/
+dist/
+
+# 引擎内部目录（只读，不属于用户代码）
+engine-docs/
+examples/
+templates/
+urhox-libs/
+schemas/
+lua-tools/
+.emmylua/
+.tmp/
+.agent/
+.cli/
+.claude/
+CLAUDE.md
+
+# 项目配置（含 project_id 等敏感信息）
+.project/
+
+# 日志
+logs/

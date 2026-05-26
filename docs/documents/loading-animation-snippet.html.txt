@@ -1,0 +1,13 @@
+<div class="hs-ui-surface loading-panel anim-fade-up">
+  <div class="hs-loading-stack">
+    <div class="hs-loading-inline">
+      <span class="hs-loading-wheel"></span>
+      <span>加载详情中</span>
+    </div>
+    <div class="hs-loader-card anim-zoom-in">
+      <span class="hs-loader-arrows"><i></i><i></i><i></i></span>
+      <span>Loading Detail</span>
+      <span class="hs-loading-wheel"></span>
+    </div>
+  </div>
+</div>

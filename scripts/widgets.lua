@@ -27,9 +27,7 @@ function SurfacePanel:Init(props)
     self.strokeC_ = props.strokeC or C.GRAPHITE
     self.cut_     = props.cut     or 24
     self.shadow_  = props.shadow  ~= false
-    self.headerH_ = props.headerH or 0
-    props.fillC=nil; props.strokeC=nil; props.cut=nil
-    props.shadow=nil; props.headerH=nil
+    props.fillC=nil; props.strokeC=nil; props.cut=nil; props.shadow=nil
     UI.Widget.Init(self, props)
 end
 
@@ -54,34 +52,6 @@ function SurfacePanel:Render(nvg)
 
     self:DrawPoly(nvg, x, y, w, h, cut)
     nvgFillColor(nvg, nvgC(self.fillC_)); nvgFill(nvg)
-
-    if self.headerH_ and self.headerH_ > 0 then
-        local hh = self.headerH_
-        local g = nvgLinearGradient(nvg, x, y, x+w, y+hh,
-            nvgCA(C.HEADER_BG,1), nvgCA(C.HEADER_B2,1))
-        nvgBeginPath(nvg)
-        nvgMoveTo(nvg, x,       y)
-        nvgLineTo(nvg, x+w-cut, y)
-        nvgLineTo(nvg, x+w,     y+cut)
-        nvgLineTo(nvg, x+w,     y+hh)
-        nvgLineTo(nvg, x,       y+hh)
-        nvgClosePath(nvg)
-        nvgFillPaint(nvg, g); nvgFill(nvg)
-
-        local step = 18
-        for dy = 0, hh, step do
-            for dx = 0, w, step do
-                nvgBeginPath(nvg)
-                nvgCircle(nvg, x+dx, y+dy, 1.1)
-                nvgFillColor(nvg, nvgRGBAf(0.58,0.69,0.79,0.42))
-                nvgFill(nvg)
-            end
-        end
-
-        nvgBeginPath(nvg)
-        nvgRect(nvg, x, y+hh-4, w, 4)
-        nvgFillColor(nvg, nvgC(C.THEME_S)); nvgFill(nvg)
-    end
 
     self:DrawPoly(nvg, x, y, w, h, cut)
     nvgStrokeColor(nvg, nvgC(self.strokeC_))

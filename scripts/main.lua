@@ -1,14 +1,16 @@
 -- main.lua  入口文件  HotSlide 星魅详情页
 
-local UI        = require("urhox-libs/UI")
-local TopBar    = require("scripts/sections/topbar")
-local Showcase  = require("scripts/sections/showcase")
-local Skins     = require("scripts/sections/skins")
-local Perf      = require("scripts/sections/performance")
-local Tuning    = require("scripts/sections/tuning")
-local Traits    = require("scripts/sections/traits")
-local PartsM    = require("scripts/sections/parts_modal")
-local State     = require("scripts/state")
+local UI           = require("urhox-libs/UI")
+local TopBar       = require("scripts/sections/topbar")
+local Showcase     = require("scripts/sections/showcase")
+local Skins        = require("scripts/sections/skins")
+local Perf         = require("scripts/sections/performance")
+local Tuning       = require("scripts/sections/tuning")
+local Traits       = require("scripts/sections/traits")
+local PartsM       = require("scripts/sections/parts_modal")
+local State        = require("scripts/state")
+local AnimModal    = require("scripts/UIKit/AnimModal")
+local StaggerReveal = require("scripts/UIKit/StaggerReveal")
 
 function Start()
     UI.Init({
@@ -23,9 +25,9 @@ function Start()
                 black  = "Fonts/BarlowCondensed-Black.ttf",
             }},
             { family = "teko",   weights = {
-                normal    = "Fonts/Teko-Regular.ttf",
-                semibold  = "Fonts/Teko-SemiBold.ttf",
-                bold      = "Fonts/Teko-Bold.ttf",
+                normal   = "Fonts/Teko-Regular.ttf",
+                semibold = "Fonts/Teko-SemiBold.ttf",
+                bold     = "Fonts/Teko-Bold.ttf",
             }},
         },
         scale = UI.Scale.DEFAULT,
@@ -38,43 +40,42 @@ function Start()
     local overlayLayer = UI.Panel {
         width="100%", height="100%",
         position="absolute", top=0, left=0,
-        pointerEvents="none",   -- 默认不拦截点击
+        pointerEvents="none",
     }
-    ---@type any
-    local currentModal = nil
+
+    -- ── 弹窗动画系统 ─────────────────────────────────────────────────
+    local modal = AnimModal.new(overlayLayer)
 
     local function CloseModal()
-        if currentModal then
-            overlayLayer:RemoveChild(currentModal)
-            currentModal = nil
-            overlayLayer:SetProp("pointerEvents", "none")
-        end
+        modal:Close()
     end
 
     local function OpenPartsModal(slotKey)
-        CloseModal()
-        currentModal = PartsM.Build(slotKey, CloseModal, function(sk, part)
+        local overlay, card = PartsM.Build(slotKey, CloseModal, function(sk, part)
             State.Equip(sk, part)
         end)
-        overlayLayer:AddChild(currentModal)
-        overlayLayer:SetProp("pointerEvents", "auto")
+        modal:Open(overlay, card)
     end
 
-    -- ── 页面内容 ──────────────────────────────────────────────────────
-    -- 注：零件槽位已嵌入 showcase 信息栏右侧（参考图1）
-    --     点击槽位直接弹出 parts_modal
+    -- ── 构建各 section ────────────────────────────────────────────────
+    local showcaseCard = Showcase.Build({ onSlotClick = OpenPartsModal })
+    local skinsCard    = Skins.Build()
+    local perfCard     = Perf.Build()
+    local tuningCard   = Tuning.Build()
+    local traitsCard   = Traits.Build()
 
+    -- ── 错开入场动画 ──────────────────────────────────────────────────
+    StaggerReveal({ showcaseCard, skinsCard, perfCard, tuningCard, traitsCard })
+
+    -- ── 页面内容 ──────────────────────────────────────────────────────
+    local cards = { showcaseCard, skinsCard, perfCard, tuningCard, traitsCard }
     local content = UI.Panel {
         width="100%", flexDirection="column", padding=8,
         backgroundColor={C.PAGE_BG[1],C.PAGE_BG[2],C.PAGE_BG[3],255},
     }
-    content:AddChild(Showcase.Build({
-        onSlotClick = OpenPartsModal,
-    }))
-    content:AddChild(Skins.Build())
-    content:AddChild(Perf.Build())
-    content:AddChild(Tuning.Build())
-    content:AddChild(Traits.Build())
+    for _, card in ipairs(cards) do
+        content:AddChild(card)
+    end
     content:AddChild(UI.Panel { height=40 })
 
     local scroll = UI.ScrollView {
@@ -95,7 +96,7 @@ function Start()
     }
 
     UI.SetRoot(root)
-    print("[HotSlide] v7 零件配装 + 响应式性能卡加载完成")
+    print("[HotSlide] v9 UIKit 架构加载完成")
 end
 
 function Stop()

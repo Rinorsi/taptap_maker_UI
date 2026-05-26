@@ -7,14 +7,15 @@
 --   ⑤ "快捷预设" + 全宽描边按钮（文字自动换行）
 --   ⑥ "携带皮肤加成" + 方形 checkbox + 文字 + 说明
 
-local UI = require("urhox-libs/UI")
-local C  = require("scripts/constants")
-local W  = require("scripts/widgets")
-local H  = require("scripts/helpers")
+local UI           = require("urhox-libs/UI")
+local C            = require("scripts/constants")
+local H            = require("scripts/helpers")
+local SpringButton = require("scripts/UIKit/SpringButton")
 
 local M = {}
 
--- ── TierBtn 类（必须定义在 M.Build 外部，避免每次调用创建独立类导致 Invalidate 找不到）
+-- ── 顶层类定义（避免 M.Build 内重复创建类，Invalidate 找不到问题）──
+
 local TierBtn = UI.Widget:Extend("TierBtn_tuning")
 function TierBtn:Init(p)
     p = p or {}
@@ -26,7 +27,7 @@ function TierBtn:Init(p)
 end
 function TierBtn:SetActive(v)
     self.active_ = v
-    self:Invalidate()
+    if self.Invalidate then self:Invalidate() end
 end
 function TierBtn:Render(nvg)
     local l = self:GetAbsoluteLayout()
@@ -52,17 +53,65 @@ function TierBtn:Render(nvg)
     nvgTextAlign(nvg,2|16); nvgText(nvg,x+w/2,y+h/2,t.label)
 end
 
+-- ── LevelBox：等级数字框 ────────────────────────────────────────────
+local LevelBox = UI.Widget:Extend("LevelBox_tu")
+function LevelBox:Init(p)
+    p = p or {}
+    self.val_ = p.val or 1
+    p.val = nil
+    UI.Widget.Init(self, p)
+end
+function LevelBox:SetVal(v)
+    self.val_ = v
+    if self.Invalidate then self:Invalidate() end
+end
+function LevelBox:Render(nvg)
+    local l = self:GetAbsoluteLayout()
+    local x,y,w,h = l.x,l.y,l.w,l.h
+    nvgBeginPath(nvg); nvgRect(nvg,x,y,w,h)
+    nvgFillColor(nvg,nvgRGBAf(1,1,1,1)); nvgFill(nvg)
+    nvgBeginPath(nvg); nvgRect(nvg,x,y,w,h)
+    nvgStrokeColor(nvg,nvgRGBAf(C.GRAPHITE[1]/255,C.GRAPHITE[2]/255,C.GRAPHITE[3]/255,1))
+    nvgStrokeWidth(nvg,2); nvgStroke(nvg)
+    nvgFontFace(nvg,UI.Theme.FontFace("teko","bold"))
+    nvgFontSize(nvg,UI.Theme.FontSize(22))
+    nvgFillColor(nvg,nvgRGBAf(C.INK[1]/255,C.INK[2]/255,C.INK[3]/255,1))
+    nvgTextAlign(nvg,2|16); nvgText(nvg,x+w/2,y+h/2,tostring(self.val_))
+end
+
+-- ── SkinChk：皮肤加成方形 checkbox ──────────────────────────────────
+local SkinChk = UI.Widget:Extend("SkinChk_tu")
+function SkinChk:Init(p)
+    p = p or {}
+    self.checked_ = p.checked or false
+    p.checked = nil
+    UI.Widget.Init(self, p)
+end
+function SkinChk:SetChecked(v)
+    self.checked_ = v
+    if self.Invalidate then self:Invalidate() end
+end
+function SkinChk:Render(nvg)
+    local l = self:GetAbsoluteLayout()
+    local x,y,w,h = l.x,l.y,l.w,l.h
+    nvgBeginPath(nvg); nvgRect(nvg,x,y,w,h)
+    nvgFillColor(nvg,nvgRGBAf(1,1,1,1)); nvgFill(nvg)
+    nvgStrokeColor(nvg,nvgRGBAf(C.GRAPHITE[1]/255,C.GRAPHITE[2]/255,C.GRAPHITE[3]/255,1))
+    nvgStrokeWidth(nvg,2); nvgStroke(nvg)
+    if self.checked_ then
+        local cx,cy,s = x+w/2,y+h/2,w*0.28
+        nvgBeginPath(nvg)
+        nvgMoveTo(nvg,cx-s,cy); nvgLineTo(nvg,cx-s*0.1,cy+s*0.9)
+        nvgLineTo(nvg,cx+s,cy-s*0.8)
+        nvgStrokeColor(nvg,nvgRGBAf(C.GRAPHITE[1]/255,C.GRAPHITE[2]/255,C.GRAPHITE[3]/255,1))
+        nvgStrokeWidth(nvg,2.5); nvgLineCap(nvg,2); nvgStroke(nvg)
+    end
+end
+
 function M.Build()
     local selectedTier = 1
     ---@type table[]
     local tierBtnWidgets = {}
-
-    -- ── 卡头（无右侧按钮）────────────────────────────────────────────
-    local cardHead = H.MakeCardHeader({
-        titleCN = "构筑调校",
-        titleEN = "ECU TUNING",
-        height  = 72,
-    })
 
     -- ── 方形阶级按钮工厂 ─────────────────────────────────────────────
     local function MakeTierBtn(tier, idx)
@@ -71,13 +120,14 @@ function M.Build()
             width=w, height=40,
             active=(idx==1),
             tierDat=tier,
-            onClick=function()
-                selectedTier = idx
-                for j, tb in ipairs(tierBtnWidgets) do
-                    tb:SetActive(j==idx)
-                end
-            end,
+            transition = "scale 0.12s easeIn",
         })
+        SpringButton.wrap(btn, function()
+            selectedTier = idx
+            for j, tb in ipairs(tierBtnWidgets) do
+                tb:SetActive(j==idx)
+            end
+        end)
         table.insert(tierBtnWidgets, btn)
         return btn
     end
@@ -101,29 +151,6 @@ function M.Build()
 
     -- ── 等级：滑块左 + 数字框右 ──────────────────────────────────────
     local levelVal = 1
-
-    local LevelBox = UI.Widget:Extend("LevelBox_tu")
-    function LevelBox:Init(p)
-        p = p or {}
-        self.val_ = p.val or 1
-        p.val = nil
-        UI.Widget.Init(self, p)
-    end
-    function LevelBox:SetVal(v) self.val_ = v; self:Invalidate() end
-    function LevelBox:Render(nvg)
-        local l = self:GetAbsoluteLayout()
-        local x,y,w,h = l.x,l.y,l.w,l.h
-        nvgBeginPath(nvg); nvgRect(nvg,x,y,w,h)
-        nvgFillColor(nvg,nvgRGBAf(1,1,1,1)); nvgFill(nvg)
-        nvgBeginPath(nvg); nvgRect(nvg,x,y,w,h)
-        nvgStrokeColor(nvg,nvgRGBAf(C.GRAPHITE[1]/255,C.GRAPHITE[2]/255,C.GRAPHITE[3]/255,1))
-        nvgStrokeWidth(nvg,2); nvgStroke(nvg)
-        nvgFontFace(nvg,UI.Theme.FontFace("teko","bold"))
-        nvgFontSize(nvg,UI.Theme.FontSize(22))
-        nvgFillColor(nvg,nvgRGBAf(C.INK[1]/255,C.INK[2]/255,C.INK[3]/255,1))
-        nvgTextAlign(nvg,2|16); nvgText(nvg,x+w/2,y+h/2,tostring(self.val_))
-    end
-
     ---@type any
     local levelBox = LevelBox:new({ width=52, height=40, val=1 })
 
@@ -191,31 +218,6 @@ function M.Build()
 
     -- ── 携带皮肤加成 ─────────────────────────────────────────────────
     local skinOn = false
-
-    local SkinChk = UI.Widget:Extend("SkinChk_tu")
-    function SkinChk:Init(p)
-        p = p or {}
-        self.checked_ = p.checked or false
-        p.checked = nil
-        UI.Widget.Init(self, p)
-    end
-    function SkinChk:SetChecked(v) self.checked_ = v; self:Invalidate() end
-    function SkinChk:Render(nvg)
-        local l = self:GetAbsoluteLayout()
-        local x,y,w,h = l.x,l.y,l.w,l.h
-        nvgBeginPath(nvg); nvgRect(nvg,x,y,w,h)
-        nvgFillColor(nvg,nvgRGBAf(1,1,1,1)); nvgFill(nvg)
-        nvgStrokeColor(nvg,nvgRGBAf(C.GRAPHITE[1]/255,C.GRAPHITE[2]/255,C.GRAPHITE[3]/255,1))
-        nvgStrokeWidth(nvg,2); nvgStroke(nvg)
-        if self.checked_ then
-            local cx,cy,s = x+w/2,y+h/2,w*0.28
-            nvgBeginPath(nvg)
-            nvgMoveTo(nvg,cx-s,cy); nvgLineTo(nvg,cx-s*0.1,cy+s*0.9)
-            nvgLineTo(nvg,cx+s,cy-s*0.8)
-            nvgStrokeColor(nvg,nvgRGBAf(C.GRAPHITE[1]/255,C.GRAPHITE[2]/255,C.GRAPHITE[3]/255,1))
-            nvgStrokeWidth(nvg,2.5); nvgLineCap(nvg,2); nvgStroke(nvg)
-        end
-    end
     ---@type any
     local skinChk = SkinChk:new({ width=20, height=20, checked=false })
 
@@ -249,27 +251,10 @@ function M.Build()
         children={ skinChk, skinSubLbl }
     }
 
-    -- ── 卡体（浅灰点阵背景）──────────────────────────────────────────
-    local BodyBg = UI.Widget:Extend("TuningBody_tu")
-    function BodyBg:Init(p) UI.Widget.Init(self, p) end
-    function BodyBg:Render(nvg)
-        local l = self:GetAbsoluteLayout()
-        local x,y,w,h = l.x,l.y,l.w,l.h
-        nvgBeginPath(nvg); nvgRect(nvg,x,y,w,h)
-        nvgFillColor(nvg,nvgRGBAf(C.BODY_BG[1]/255,C.BODY_BG[2]/255,C.BODY_BG[3]/255,1))
-        nvgFill(nvg)
-        for dy=10,h,18 do for dx=10,w,18 do
-            nvgBeginPath(nvg); nvgCircle(nvg,x+dx,y+dy,1.0)
-            nvgFillColor(nvg,nvgRGBAf(C.GRAPHITE[1]/255,C.GRAPHITE[2]/255,C.GRAPHITE[3]/255,0.12))
-            nvgFill(nvg)
-        end end
-    end
-
-    local cardBody = BodyBg:new({
-        width="100%",
-        padding=18,
-        flexDirection="column",
-        children={
+    return H.MakeCard({
+        titleCN  = "构筑调校",
+        titleEN  = "ECU TUNING",
+        children = {
             tierLabel, tierRow,
             levelLbl, levelRow,
             presetLbl, presetBtn,
@@ -277,15 +262,7 @@ function M.Build()
             skinMainLbl,
             skinChkRow,
             skinDescLbl,
-        }
-    })
-
-    return W.SurfacePanel:new({
-        width="100%", marginBottom=12,
-        flexDirection="column",
-        fillC=C.CARD_BG, strokeC=C.GRAPHITE,
-        cut=24, shadow=true, padding=0, overflow="hidden",
-        children={ cardHead, cardBody }
+        },
     })
 end
 

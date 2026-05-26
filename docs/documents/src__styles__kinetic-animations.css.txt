@@ -1,0 +1,432 @@
+:root {
+  --hs-anim-fast: 0.24s;
+  --hs-anim-base: 0.34s;
+  --hs-anim-slow: 0.5s;
+  --hs-anim-step: 26ms;
+  --hs-anim-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --hs-anim-ease-spring: cubic-bezier(0.2, 0.9, 0.28, 1.12);
+}
+
+/* Loader / continuous motion */
+@keyframes spin-fast { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes drift-shake { 0%, 100% { transform: translateX(0) skewX(-10deg); } 25% { transform: translateX(-2px) skewX(-12deg); } 75% { transform: translateX(2px) skewX(-8deg); } }
+@keyframes pop-smoke { 0% { transform: scale(0.2) translate(0, 0) rotate(0deg); opacity: 1; } 50% { opacity: 1; } 100% { transform: scale(1.5) translate(var(--tx), var(--ty)) rotate(var(--rot)); opacity: 0; } }
+@keyframes blink-step { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes color-shift { 0%, 100% { background-color: #00ffcc; } 33% { background-color: #ff0055; } 66% { background-color: #ffe600; } }
+
+.animate-spin-fast { animation: spin-fast 0.4s linear infinite; }
+.animate-drift { animation: drift-shake 0.15s infinite; }
+.animate-blink { animation: blink-step 0.6s infinite; }
+.animate-color-shift { animation: color-shift 0.9s steps(1) infinite; }
+.smoke-puff {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  animation: pop-smoke 0.7s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
+}
+
+/* 20 entry classes */
+@keyframes animFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes animFadeUp { from { opacity: 0; transform: translate3d(0, 28px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes animFadeDown { from { opacity: 0; transform: translate3d(0, -24px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes animZoomIn { from { opacity: 0; transform: scale(0.88); } to { opacity: 1; transform: scale(1); } }
+@keyframes animZoomOut { from { opacity: 0; transform: scale(1.12); } to { opacity: 1; transform: scale(1); } }
+@keyframes animSlideLeft { from { opacity: 0; transform: translate3d(-48px, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes animSlideRight { from { opacity: 0; transform: translate3d(48px, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+@keyframes animFlyUp { 0% { opacity: 0; transform: translate3d(0, 90px, 0); } 60% { opacity: 1; transform: translate3d(0, -8px, 0); } 100% { transform: translate3d(0, 0, 0); } }
+@keyframes animFlipX { from { opacity: 0; transform: perspective(420px) rotateX(90deg); } to { opacity: 1; transform: perspective(420px) rotateX(0deg); } }
+@keyframes animFlipY { from { opacity: 0; transform: perspective(420px) rotateY(90deg); } to { opacity: 1; transform: perspective(420px) rotateY(0deg); } }
+@keyframes animBounceIn { 0% { opacity: 0; transform: scale(0.3); } 50% { opacity: 1; transform: scale(1.05); } 70% { transform: scale(0.92); } 100% { transform: scale(1); } }
+@keyframes animRotateIn { from { opacity: 0; transform: rotate(-88deg) scale(0.6); } to { opacity: 1; transform: rotate(0deg) scale(1); } }
+@keyframes animSpeedIn { 0% { opacity: 0; transform: translate3d(150%, 0, 0) skewX(-20deg); } 60% { opacity: 1; transform: translate3d(-10%, 0, 0) skewX(10deg); } 80% { transform: translate3d(5%, 0, 0) skewX(-5deg); } 100% { transform: translate3d(0, 0, 0) skewX(0deg); } }
+@keyframes animSkewUp { from { opacity: 0; transform: translate3d(0, 48px, 0) skewY(10deg); } to { opacity: 1; transform: translate3d(0, 0, 0) skewY(0deg); } }
+@keyframes animBlurIn { from { opacity: 0; filter: blur(12px); } to { opacity: 1; filter: blur(0); } }
+@keyframes animGlitchIn { 0% { opacity: 0; transform: translate3d(0, 0, 0); } 20% { opacity: 1; transform: translate3d(-4px, 2px, 0); } 40% { transform: translate3d(4px, -2px, 0); opacity: 0.84; } 60% { transform: translate3d(-2px, 2px, 0); opacity: 1; filter: hue-rotate(90deg); } 80% { transform: translate3d(2px, -2px, 0); filter: hue-rotate(0deg); } 100% { transform: translate3d(0, 0, 0); } }
+@keyframes animElastic { 0% { opacity: 0; transform: scaleX(0.55) scaleY(1.45); } 50% { opacity: 1; transform: scaleX(1.16) scaleY(0.84); } 75% { transform: scaleX(0.93) scaleY(1.08); } 100% { transform: scaleX(1) scaleY(1); } }
+@keyframes animSwingDrop { 0% { opacity: 0; transform: rotate(-30deg) translate3d(0, -48px, 0); transform-origin: top center; } 50% { opacity: 1; transform: rotate(15deg) translate3d(0, 0, 0); transform-origin: top center; } 100% { transform: rotate(0deg); transform-origin: top center; } }
+@keyframes animDepthIn { from { opacity: 0; transform: translate3d(0, 0, -180px) scale(0.6); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+@keyframes animBlindX { from { opacity: 0; transform: scaleX(0); transform-origin: left; } to { opacity: 1; transform: scaleX(1); transform-origin: left; } }
+
+.anim-fade-in { animation: animFadeIn var(--hs-anim-base) var(--hs-anim-ease-out) both; }
+.anim-fade-up { animation: animFadeUp var(--hs-anim-base) cubic-bezier(0.2, 0.92, 0.26, 1) both; }
+.anim-fade-down { animation: animFadeDown var(--hs-anim-base) cubic-bezier(0.28, 0.84, 0.34, 1) both; }
+.anim-zoom-in { animation: animZoomIn 0.34s var(--hs-anim-ease-spring) both; }
+.anim-zoom-out { animation: animZoomOut 0.34s var(--hs-anim-ease-out) both; }
+.anim-slide-left { animation: animSlideLeft var(--hs-anim-base) cubic-bezier(0.11, 0.9, 0.2, 1) both; }
+.anim-slide-right { animation: animSlideRight var(--hs-anim-base) cubic-bezier(0.11, 0.9, 0.2, 1) both; }
+.anim-fly-up { animation: animFlyUp 0.43s var(--hs-anim-ease-out) both; }
+.anim-flip-x { animation: animFlipX 0.43s var(--hs-anim-ease-out) both; backface-visibility: hidden; }
+.anim-flip-y { animation: animFlipY 0.43s var(--hs-anim-ease-out) both; backface-visibility: hidden; }
+.anim-bounce-in { animation: animBounceIn 0.46s var(--hs-anim-ease-out) both; }
+.anim-rotate-in { animation: animRotateIn var(--hs-anim-base) var(--hs-anim-ease-out) both; }
+.anim-speed-in { animation: animSpeedIn 0.46s cubic-bezier(0.12, 0.89, 0.22, 1.12) both; }
+.anim-skew-up { animation: animSkewUp var(--hs-anim-base) cubic-bezier(0.16, 0.92, 0.24, 1) both; }
+.anim-blur-in { animation: animBlurIn 0.46s var(--hs-anim-ease-out) both; }
+.anim-glitch-in { animation: animGlitchIn 0.34s var(--hs-anim-ease-out) both; }
+.anim-elastic { animation: animElastic 0.43s var(--hs-anim-ease-out) both; }
+.anim-swing-drop { animation: animSwingDrop 0.46s var(--hs-anim-ease-out) both; }
+.anim-depth-in { animation: animDepthIn 0.48s var(--hs-anim-ease-out) both; perspective: 1000px; transform-style: preserve-3d; }
+.anim-blind-x { animation: animBlindX 0.29s var(--hs-anim-ease-out) both; }
+
+/* Universal loading states */
+.hs-loading-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.hs-loading-shell {
+  position: relative;
+  border: 1px solid rgba(24, 39, 58, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fbfdff, #f2f7fc);
+  padding: 14px;
+  overflow: hidden;
+}
+
+@keyframes hsShimmer {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+.hs-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #e9eff6 0%, #dfe8f2 50%, #e9eff6 100%);
+}
+
+.hs-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, 0.56) 50%, transparent 100%);
+  animation: hsShimmer 1.2s linear infinite;
+}
+
+.hs-skeleton-line { height: 12px; }
+.hs-skeleton-line--lg { height: 18px; }
+.hs-skeleton-line--sm { height: 8px; }
+.hs-skeleton-thumb { height: 86px; }
+
+.hs-loading-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #314b66;
+  text-transform: uppercase;
+}
+
+.hs-loading-wheel {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(17, 24, 39, 0.24);
+  border-top-color: #ff0055;
+  border-right-color: #00ffcc;
+  border-bottom-color: #ffe600;
+  animation: spin-fast 0.4s linear infinite;
+}
+
+.hs-loader-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 2px solid #1d2a38;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 3px 3px 0 rgba(17, 24, 39, 0.2);
+  color: #1d2a38;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hs-loader-arrows {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.hs-loader-arrows > i {
+  width: 7px;
+  height: 12px;
+  transform: skewX(-14deg);
+  border: 1px solid #1d2a38;
+  animation: color-shift 0.9s steps(1) infinite;
+}
+
+.hs-loader-arrows > i:nth-child(2) { animation-delay: -0.25s; }
+.hs-loader-arrows > i:nth-child(3) { animation-delay: -0.5s; }
+
+.hs-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(242, 248, 255, 0.88));
+  backdrop-filter: blur(2px);
+}
+
+.hs-feed-loading-zone {
+  position: relative;
+}
+
+/* Route / page switch transition */
+.wiki-view-stage {
+  min-height: 100%;
+  width: 100%;
+  max-width: 100%;
+}
+
+.wiki-view-swap-enter-active,
+.wiki-view-swap-leave-active {
+  transition: transform 0.24s var(--hs-anim-ease-out), opacity 0.24s var(--hs-anim-ease-out);
+}
+
+.wiki-view-swap-enter-from {
+  opacity: 0;
+  transform: translate3d(0, 10px, 0);
+}
+
+.wiki-view-swap-leave-to {
+  opacity: 0;
+  transform: translate3d(0, -8px, 0);
+}
+
+.hs-fade-enter-active,
+.hs-fade-leave-active {
+  transition: opacity 0.17s var(--hs-anim-ease-out);
+}
+
+.hs-fade-enter-from,
+.hs-fade-leave-to {
+  opacity: 0;
+}
+
+/* Generic "first paint" entry helper */
+.hs-anim-enter {
+  animation: animFadeUp var(--hs-anim-base) var(--hs-anim-ease-out) both;
+}
+
+/* Stagger library: assign nth child index */
+.hs-stagger-grid > * {
+  --hs-stagger-index: 0;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: animFadeUp var(--hs-anim-base) var(--hs-anim-ease-out) both;
+  animation-delay: calc(var(--hs-stagger-index) * var(--hs-anim-step));
+}
+
+.hs-stagger-grid > :nth-child(1) { --hs-stagger-index: 1; }
+.hs-stagger-grid > :nth-child(2) { --hs-stagger-index: 2; }
+.hs-stagger-grid > :nth-child(3) { --hs-stagger-index: 3; }
+.hs-stagger-grid > :nth-child(4) { --hs-stagger-index: 4; }
+.hs-stagger-grid > :nth-child(5) { --hs-stagger-index: 5; }
+.hs-stagger-grid > :nth-child(6) { --hs-stagger-index: 6; }
+.hs-stagger-grid > :nth-child(7) { --hs-stagger-index: 7; }
+.hs-stagger-grid > :nth-child(8) { --hs-stagger-index: 8; }
+.hs-stagger-grid > :nth-child(9) { --hs-stagger-index: 9; }
+.hs-stagger-grid > :nth-child(10) { --hs-stagger-index: 10; }
+.hs-stagger-grid > :nth-child(11) { --hs-stagger-index: 11; }
+.hs-stagger-grid > :nth-child(12) { --hs-stagger-index: 12; }
+.hs-stagger-grid > :nth-child(13) { --hs-stagger-index: 13; }
+.hs-stagger-grid > :nth-child(14) { --hs-stagger-index: 14; }
+.hs-stagger-grid > :nth-child(15) { --hs-stagger-index: 15; }
+.hs-stagger-grid > :nth-child(16) { --hs-stagger-index: 16; }
+
+/* Apply site-wide stagger to major list blocks without touching old CSS files */
+.wiki-page .garage-car-grid,
+.wiki-page .community-feed-grid,
+.wiki-page .community-featured-rail,
+.wiki-page .profile-car-grid,
+.wiki-page .profile-grid,
+.wiki-page .inbox-panel__scroller {
+  --hs-anim-step: 22ms;
+}
+
+.wiki-page .garage-car-grid > .car-card,
+.wiki-page .community-feed-grid > .community-card-wrapper,
+.wiki-page .community-featured-rail > .community-card-wrapper,
+.wiki-page .profile-car-grid > *,
+.wiki-page .profile-grid > *,
+.wiki-page .inbox-panel__scroller > .interaction-card,
+.wiki-page .inbox-panel__scroller > .system-card {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: animFadeUp var(--hs-anim-base) var(--hs-anim-ease-out) both;
+}
+
+.wiki-page .garage-car-grid > *:nth-child(1),
+.wiki-page .community-feed-grid > *:nth-child(1),
+.wiki-page .community-featured-rail > *:nth-child(1),
+.wiki-page .profile-car-grid > *:nth-child(1),
+.wiki-page .profile-grid > *:nth-child(1),
+.wiki-page .inbox-panel__scroller > *:nth-child(1) { animation-delay: 36ms; }
+.wiki-page .garage-car-grid > *:nth-child(2),
+.wiki-page .community-feed-grid > *:nth-child(2),
+.wiki-page .community-featured-rail > *:nth-child(2),
+.wiki-page .profile-car-grid > *:nth-child(2),
+.wiki-page .profile-grid > *:nth-child(2),
+.wiki-page .inbox-panel__scroller > *:nth-child(2) { animation-delay: 72ms; }
+.wiki-page .garage-car-grid > *:nth-child(3),
+.wiki-page .community-feed-grid > *:nth-child(3),
+.wiki-page .community-featured-rail > *:nth-child(3),
+.wiki-page .profile-car-grid > *:nth-child(3),
+.wiki-page .profile-grid > *:nth-child(3),
+.wiki-page .inbox-panel__scroller > *:nth-child(3) { animation-delay: 108ms; }
+.wiki-page .garage-car-grid > *:nth-child(4),
+.wiki-page .community-feed-grid > *:nth-child(4),
+.wiki-page .community-featured-rail > *:nth-child(4),
+.wiki-page .profile-car-grid > *:nth-child(4),
+.wiki-page .profile-grid > *:nth-child(4),
+.wiki-page .inbox-panel__scroller > *:nth-child(4) { animation-delay: 144ms; }
+.wiki-page .garage-car-grid > *:nth-child(5),
+.wiki-page .community-feed-grid > *:nth-child(5),
+.wiki-page .community-featured-rail > *:nth-child(5),
+.wiki-page .profile-car-grid > *:nth-child(5),
+.wiki-page .profile-grid > *:nth-child(5),
+.wiki-page .inbox-panel__scroller > *:nth-child(5) { animation-delay: 180ms; }
+.wiki-page .garage-car-grid > *:nth-child(6),
+.wiki-page .community-feed-grid > *:nth-child(6),
+.wiki-page .community-featured-rail > *:nth-child(6),
+.wiki-page .profile-car-grid > *:nth-child(6),
+.wiki-page .profile-grid > *:nth-child(6),
+.wiki-page .inbox-panel__scroller > *:nth-child(6) { animation-delay: 216ms; }
+.wiki-page .garage-car-grid > *:nth-child(7),
+.wiki-page .community-feed-grid > *:nth-child(7),
+.wiki-page .community-featured-rail > *:nth-child(7),
+.wiki-page .profile-car-grid > *:nth-child(7),
+.wiki-page .profile-grid > *:nth-child(7),
+.wiki-page .inbox-panel__scroller > *:nth-child(7) { animation-delay: 252ms; }
+.wiki-page .garage-car-grid > *:nth-child(8),
+.wiki-page .community-feed-grid > *:nth-child(8),
+.wiki-page .community-featured-rail > *:nth-child(8),
+.wiki-page .profile-car-grid > *:nth-child(8),
+.wiki-page .profile-grid > *:nth-child(8),
+.wiki-page .inbox-panel__scroller > *:nth-child(8) { animation-delay: 288ms; }
+
+/* Modal / overlay unified motion */
+.wiki-page .auth-modal-overlay {
+  animation: animFadeIn 0.2s var(--hs-anim-ease-out) both;
+}
+
+.wiki-page .modal-panel.panel-cut {
+  animation: animZoomIn 0.28s var(--hs-anim-ease-spring) both;
+}
+
+.wiki-page .admin-block.panel-cut,
+.wiki-page .preview-comments.panel-cut,
+.wiki-page .visitor-profile-head.panel-cut {
+  animation: animFadeUp 0.28s var(--hs-anim-ease-out) both;
+}
+
+.wiki-page .modal-panel .admin-scroll > *,
+.wiki-page .modal-panel .preview-comments__list > *,
+.wiki-page .modal-panel .community-review-list > *,
+.wiki-page .modal-panel .dm-list > *,
+.wiki-page .modal-panel .chat-history > * {
+  opacity: 0;
+  animation: animFadeUp 0.32s var(--hs-anim-ease-out) both;
+}
+
+.wiki-page .modal-panel .admin-scroll > *:nth-child(1),
+.wiki-page .modal-panel .preview-comments__list > *:nth-child(1),
+.wiki-page .modal-panel .community-review-list > *:nth-child(1),
+.wiki-page .modal-panel .dm-list > *:nth-child(1),
+.wiki-page .modal-panel .chat-history > *:nth-child(1) { animation-delay: 30ms; }
+.wiki-page .modal-panel .admin-scroll > *:nth-child(2),
+.wiki-page .modal-panel .preview-comments__list > *:nth-child(2),
+.wiki-page .modal-panel .community-review-list > *:nth-child(2),
+.wiki-page .modal-panel .dm-list > *:nth-child(2),
+.wiki-page .modal-panel .chat-history > *:nth-child(2) { animation-delay: 60ms; }
+.wiki-page .modal-panel .admin-scroll > *:nth-child(3),
+.wiki-page .modal-panel .preview-comments__list > *:nth-child(3),
+.wiki-page .modal-panel .community-review-list > *:nth-child(3),
+.wiki-page .modal-panel .dm-list > *:nth-child(3),
+.wiki-page .modal-panel .chat-history > *:nth-child(3) { animation-delay: 90ms; }
+.wiki-page .modal-panel .admin-scroll > *:nth-child(4),
+.wiki-page .modal-panel .preview-comments__list > *:nth-child(4),
+.wiki-page .modal-panel .community-review-list > *:nth-child(4),
+.wiki-page .modal-panel .dm-list > *:nth-child(4),
+.wiki-page .modal-panel .chat-history > *:nth-child(4) { animation-delay: 120ms; }
+
+/* Smaller motion on narrow viewports for smoother mobile rendering */
+@media (max-width: 900px) {
+  .wiki-view-swap-enter-active,
+  .wiki-view-swap-leave-active {
+    transition-duration: 0.24s;
+  }
+
+  .hs-stagger-grid > *,
+  .wiki-page .garage-car-grid > .car-card,
+  .wiki-page .community-feed-grid > .community-card-wrapper,
+  .wiki-page .community-featured-rail > .community-card-wrapper,
+  .wiki-page .profile-car-grid > *,
+  .wiki-page .profile-grid > *,
+  .wiki-page .inbox-panel__scroller > .interaction-card,
+  .wiki-page .inbox-panel__scroller > .system-card,
+  .wiki-page .modal-panel .admin-scroll > *,
+  .wiki-page .modal-panel .preview-comments__list > *,
+  .wiki-page .modal-panel .community-review-list > *,
+  .wiki-page .modal-panel .dm-list > *,
+  .wiki-page .modal-panel .chat-history > * {
+    animation-duration: 0.32s;
+  }
+}
+
+/* Accessibility / performance escape hatch */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin-fast,
+  .animate-drift,
+  .animate-blink,
+  .animate-color-shift,
+  .smoke-puff,
+  .anim-fade-in,
+  .anim-fade-up,
+  .anim-fade-down,
+  .anim-zoom-in,
+  .anim-zoom-out,
+  .anim-slide-left,
+  .anim-slide-right,
+  .anim-fly-up,
+  .anim-flip-x,
+  .anim-flip-y,
+  .anim-bounce-in,
+  .anim-rotate-in,
+  .anim-speed-in,
+  .anim-skew-up,
+  .anim-blur-in,
+  .anim-glitch-in,
+  .anim-elastic,
+  .anim-swing-drop,
+  .anim-depth-in,
+  .anim-blind-x,
+  .hs-anim-enter,
+  .hs-stagger-grid > *,
+  .wiki-page .garage-car-grid > .car-card,
+  .wiki-page .community-feed-grid > .community-card-wrapper,
+  .wiki-page .community-featured-rail > .community-card-wrapper,
+  .wiki-page .profile-car-grid > *,
+  .wiki-page .profile-grid > *,
+  .wiki-page .inbox-panel__scroller > .interaction-card,
+  .wiki-page .inbox-panel__scroller > .system-card {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+  }
+
+  .wiki-view-swap-enter-active,
+  .wiki-view-swap-leave-active {
+    transition: none !important;
+  }
+}

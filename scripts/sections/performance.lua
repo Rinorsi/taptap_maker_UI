@@ -3,31 +3,14 @@
 -- 与 tuning.lua / traits.lua 统一风格
 -- 响应式：注册 State.OnRefresh，零件换装后自动更新数值和进度条
 
-local UI    = require("urhox-libs/UI")
-local C     = require("scripts/constants")
-local W     = require("scripts/widgets")
-local H     = require("scripts/helpers")
-local State = require("scripts/state")
+local UI            = require("urhox-libs/UI")
+local C             = require("scripts/constants")
+local W             = require("scripts/widgets")
+local H             = require("scripts/helpers")
+local State         = require("scripts/state")
+local RollingNumber = require("scripts/UIKit/RollingNumber")
 
 local M = {}
-
--- ── BodyBg：浅底点阵背景（与 tuning.lua 同风格）──────────────────────
-local PerfBodyBg = UI.Widget:Extend("PerfBodyBg_pf2")
-function PerfBodyBg:Init(p) UI.Widget.Init(self, p) end
-function PerfBodyBg:Render(nvg)
-    local l = self:GetAbsoluteLayout()
-    local x, y, w, h = l.x, l.y, l.w, l.h
-    -- 浅灰底
-    nvgBeginPath(nvg); nvgRect(nvg, x, y, w, h)
-    nvgFillColor(nvg, nvgRGBAf(244/255, 247/255, 250/255, 1)); nvgFill(nvg)
-    -- 细点阵
-    for dy = 8, h, 16 do
-        for dx = 8, w, 16 do
-            nvgBeginPath(nvg); nvgCircle(nvg, x+dx, y+dy, 1.0)
-            nvgFillColor(nvg, nvgRGBAf(0.69, 0.76, 0.84, 0.35)); nvgFill(nvg)
-        end
-    end
-end
 
 -- ── 单个 stat-block（label + 大值 + StatBar）────────────────────────
 -- 返回 { panel, valueLbl, bar } 以供响应式更新
@@ -83,32 +66,24 @@ local function MakeSubPill(sub, initVal)
 end
 
 function M.Build()
-    -- ── 综合性能分（卡头右侧）──────────────────────────────────────
-    local totalLbl = UI.Label {
-        text = tostring(State.TotalPerf()),
-        fontSize = 44, fontWeight = "bold", fontFamily = "teko",
-        fontColor = { 255, 255, 255, 255 },
-    }
-    local scorePanel = UI.Panel {
-        flexDirection = "column", alignItems = "center",
-        justifyContent = "center",
-        paddingHorizontal = 12, paddingBottom = 4,
-        children = {
-            UI.Label {
-                text = "综合性能",
-                fontSize = 10, fontWeight = "bold",
-                fontColor = { 133, 161, 189, 255 },
-            },
-            totalLbl,
-        }
-    }
+    -- ── 综合性能分：RollingNumber 驱动滚动计数动画 ──────────────────
+    local perfCounter = RollingNumber.new({ initial = 0 })
 
-    local cardHead = H.MakeCardHeader({
-        titleCN     = "性能评估",
-        titleEN     = "PERFORMANCE",
-        height      = 72,
-        rightWidget = scorePanel,
-    })
+    -- scoreGetter 供 NanoVG 每帧读取（BgW:Render 调用）
+    local perfScoreGetter = function()
+        return perfCounter:Get()
+    end
+
+    -- 入场时从 0 滚到实际分（延迟一帧，等 widget 挂载后再启动）
+    local kickedOff = false
+    SubscribeToEvent("Update", function(et, ed)
+        local dt = ed["TimeStep"]:GetFloat()
+        if not kickedOff then
+            kickedOff = true
+            perfCounter:Set(State.TotalPerf())
+        end
+        perfCounter:Update(dt)
+    end)
 
     -- ── 4 个 stat-block（2 列 × 2 行）────────────────────────────
     local statBlocks = {}
@@ -159,40 +134,30 @@ function M.Build()
         end
     end
 
-    -- ── 卡体（BodyBg 做 absolute 背景，内容层做 relative 前景）──
-    local cardBody = PerfBodyBg:new({
-        width = "100%",
-        flexDirection = "column",
-        padding = 8,
-        paddingTop = 10,
-        children = {
-            row1, hline1, row2, subRow,
-        }
-    })
-
     -- ── 注册 State 刷新回调 ─────────────────────────────────────
     State.OnRefresh(function()
-        -- 更新综合性能分
-        totalLbl:SetProp("text", tostring(State.TotalPerf()))
-        -- 更新 4 个主属性
+        -- 综合性能分：从当前显示值滚动到新值
+        perfCounter:Set(State.TotalPerf())
+        -- 主属性数值和进度条
         for _, sb in ipairs(statBlocks) do
             local v = State.MainStatValue(sb.stat)
             sb.valueLbl:SetProp("text", tostring(v))
             sb.bar:SetValue(v)
         end
-        -- 更新 5 个副属性
         for _, si in ipairs(subItems) do
             si.valLbl:SetProp("text", tostring(State.SubStatValue(si.sub)))
         end
     end)
 
-    -- ── 外层卡片（SurfacePanel）──────────────────────────────────
-    return W.SurfacePanel:new({
-        width = "100%", marginBottom = 12,
-        flexDirection = "column",
-        fillC = C.CARD_BG, strokeC = C.GRAPHITE,
-        cut = 24, shadow = true, padding = 0, overflow = "hidden",
-        children = { cardHead, cardBody }
+    -- ── 组装卡片 ──────────────────────────────────────────────────
+    return H.MakeCard({
+        titleCN     = "性能评估",
+        titleEN     = "PERFORMANCE",
+        cut         = 24,
+        scoreGetter = perfScoreGetter,
+        padding     = 8,
+        paddingTop  = 10,
+        children    = { row1, hline1, row2, subRow },
     })
 end
 

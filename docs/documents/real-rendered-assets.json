@@ -1,0 +1,100 @@
+[
+  {
+    "alt": "WIKI Logo",
+    "className": "wiki-sidebar__logo-img",
+    "src": "https://hot.seimu.cn/ui/014-Mono.png",
+    "currentSrc": "https://hot.seimu.cn/ui/014-Mono.png",
+    "naturalWidth": 256,
+    "naturalHeight": 58,
+    "box": {
+      "x": 18,
+      "y": 26,
+      "width": 210,
+      "height": 48
+    }
+  },
+  {
+    "alt": "WIKI Mini Logo",
+    "className": "wiki-sidebar__logo-mini-img",
+    "src": "https://hot.seimu.cn/ui/WIKI.png",
+    "currentSrc": "https://hot.seimu.cn/ui/WIKI.png",
+    "naturalWidth": 1080,
+    "naturalHeight": 1080,
+    "box": {
+      "x": 0,
+      "y": 0,
+      "width": 0,
+      "height": 0
+    }
+  },
+  {
+    "alt": "",
+    "className": "wiki-side-item__icon-img",
+    "src": "https://hot.seimu.cn/ui/icon-cd-stats-hl-1258.png",
+    "currentSrc": "https://hot.seimu.cn/ui/icon-cd-stats-hl-1258.png",
+    "naturalWidth": 105,
+    "naturalHeight": 105,
+    "box": {
+      "x": 24,
+      "y": 234,
+      "width": 18,
+      "height": 18
+    }
+  },
+  {
+    "alt": "星魅",
+    "className": "car-img",
+    "src": "https://hot.seimu.cn/car-sprites/GLAMOUR.png",
+    "currentSrc": "https://hot.seimu.cn/car-sprites/GLAMOUR.png",
+    "naturalWidth": 393,
+    "naturalHeight": 254,
+    "box": {
+      "x": 315,
+      "y": 275,
+      "width": 353,
+      "height": 228
+    }
+  },
+  {
+    "alt": "默认涂装",
+    "className": "skin-btn__preview",
+    "src": "https://hot.seimu.cn/car-sprites/GLAMOUR.png",
+    "currentSrc": "https://hot.seimu.cn/car-sprites/GLAMOUR.png",
+    "naturalWidth": 393,
+    "naturalHeight": 254,
+    "box": {
+      "x": 455,
+      "y": 833,
+      "width": 48,
+      "height": 48
+    }
+  },
+  {
+    "alt": "活力黄",
+    "className": "skin-btn__preview",
+    "src": "https://hot.seimu.cn/car-skins/GLAMOUR_sk2.png",
+    "currentSrc": "https://hot.seimu.cn/car-skins/GLAMOUR_sk2.png",
+    "naturalWidth": 393,
+    "naturalHeight": 254,
+    "box": {
+      "x": 635,
+      "y": 833,
+      "width": 48,
+      "height": 48
+    }
+  },
+  {
+    "alt": "竞速",
+    "className": "skin-btn__preview",
+    "src": "https://hot.seimu.cn/car-skins/GLAMOUR_sk3.png",
+    "currentSrc": "https://hot.seimu.cn/car-skins/GLAMOUR_sk3.png",
+    "naturalWidth": 485,
+    "naturalHeight": 304,
+    "box": {
+      "x": 815,
+      "y": 833,
+      "width": 48,
+      "height": 48
+    }
+  }
+]

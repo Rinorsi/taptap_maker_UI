@@ -1,0 +1,3504 @@
+<script setup>
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
+import UserAvatar from "@/components/shared/UserAvatar.vue";
+import { partsPayload } from "@/data/wikiRuntimeData";
+import { cloudApi } from "@/api/cloudApi";
+import { pickTopTitle } from "@/utils/wikiUtils";
+import { reportAssetLoadFailure, resolveRemoteAssetUrl } from "@/utils/appUrl";
+import { syncBodyScrollLock, unlockBodyScroll } from "@/utils/modalScrollLock";
+import { CAR_DETAIL_PAGE_EMITS, CAR_DETAIL_PAGE_PROPS } from "./contracts/car-detail.contracts";
+
+const props = defineProps(CAR_DETAIL_PAGE_PROPS);
+const emit = defineEmits(CAR_DETAIL_PAGE_EMITS);
+const displayNameStyle = inject("wikiDisplayNameStyle", () => ({}));
+const displayNameClass = inject("wikiDisplayNameClass", () => "");
+const titleClassName = inject("wikiTitleClassName", () => "");
+const titleInlineStyle = inject("wikiTitleInlineStyle", () => ({}));
+const { t, locale } = useI18n();
+
+const TIER_ORDER = ["C", "B", "A", "S", "SS", "SSS"];
+const MAIN_KEYS = ["MetaEarlyAcc", "MetaMidAcc", "MetaMaxSpeed", "MetaHandling"];
+const SUB_KEYS = ["MetaDrift", "MetaGrip", "MetaOffroad", "MetaBoostDuration", "MetaBoostStrength"];
+const ALL_KEYS = [...MAIN_KEYS, ...SUB_KEYS];
+const RANK_STEPS = ["RankupC2B", "RankupB2A", "RankupA2S", "RankupS2SPlus", "RankupS2SPlusPlus"];
+// UI switch: false = do not render HiddenUpgrades entries in trait list.
+// Numeric calculation remains unchanged (hidden bonus is still merged into base stats).
+const SHOW_HIDDEN_BONUS_TRAITS = false;
+// Keep legacy panel math by default; condition-gated trait behavior is handled below.
+const USE_REQUESTED_PANEL_FORMULA = false;
+const AS_MULTIPLY_TIERS = new Set(["A", "S"]);
+const SSS_ADDITIVE_TIERS = new Set(["SSS"]);
+const META_LABELS = {
+  MetaEarlyAcc: "起步",
+  MetaMidAcc: "加速度",
+  MetaMaxSpeed: "最高时速",
+  MetaHandling: "操控",
+  MetaDrift: "漂移",
+  MetaGrip: "抓地",
+  MetaOffroad: "越野",
+  MetaBoostDuration: "氮气时长",
+  MetaBoostStrength: "氮气强度",
+};
+const META_LABELS_EN = {
+  MetaEarlyAcc: "Launch",
+  MetaMidAcc: "Acceleration",
+  MetaMaxSpeed: "Top Speed",
+  MetaHandling: "Handling",
+  MetaDrift: "Drift",
+  MetaGrip: "Grip",
+  MetaOffroad: "Offroad",
+  MetaBoostDuration: "Boost Duration",
+  MetaBoostStrength: "Boost Strength",
+};
+const SKIN_FALLBACK_TYPE_KEY = {
+  0: "MetaHandling",
+  1: "MetaMaxSpeed",
+  2: "MetaMidAcc",
+  3: "MetaEarlyAcc",
+};
+const TIER_ZH = {
+  C: "C档",
+  B: "B档",
+  A: "A档",
+  S: "S档",
+  SS: "SS档",
+  SSS: "SSS档",
+};
+const TIER_EN = {
+  C: "Tier C",
+  B: "Tier B",
+  A: "Tier A",
+  S: "Tier S",
+  SS: "Tier SS",
+  SSS: "Tier SSS",
+};
+const LIMIT_TO_CONDITION_ZH = {
+  1: "比赛车 开始后{0}秒内",
+  2: "在{0}秒后",
+  3: "每{0}秒",
+  4: "当在漂移时",
+  5: "当在直线行驶时",
+  6: "当在特殊地形上时",
+  8: "在碰撞后",
+  9: "当靠近墙壁漂移时",
+  10: "如果没有碰撞",
+  104: "漂移大于等于{0}时",
+  105: "抓地力大于等于{0}时",
+  106: "越野大于等于{0}时",
+  107: "氮气时长大于等于{0}时",
+  108: "氮气强度大于等于{0}时",
+};
+const BOOST_TRIGGER_BY_TYPE_ZH = {
+  9: "当在漂移时",
+  10: "当在直线行驶时",
+  11: "在比赛车 开始时",
+  12: "当在特殊地形上时",
+};
+const RUNTIME_CONDITION_PATTERNS = [
+  /比赛车 开始/,
+  /在\d+秒后/,
+  /每\d+秒/,
+  /当在漂移时/,
+  /当在直线行驶时/,
+  /当在特殊地形上时/,
+  /在碰撞后/,
+  /当靠近墙壁漂移时/,
+  /如果没有碰撞/,
+];
+const REQUIREMENT_KEY_ALIASES = [
+  ["起步", "MetaEarlyAcc"],
+  ["加速度", "MetaMidAcc"],
+  ["最高时速", "MetaMaxSpeed"],
+  ["操控", "MetaHandling"],
+  ["漂移", "MetaDrift"],
+  ["抓地力", "MetaGrip"],
+  ["越野", "MetaOffroad"],
+  ["氮气时长", "MetaBoostDuration"],
+  ["氮气强度", "MetaBoostStrength"],
+];
+const GRADE_COLORS = { S: "#ffe23a", A: "#c95bff", B: "#ffae2a", C: "#22b8ff" };
+const GRADE_COLORS_ALT = { S: "#6eea79", A: "#f06be8", B: "#f0d43a", C: "#55d7e6" };
+const GRADE_SOFT_BG = {
+  S: "#fff6b8",
+  A: "#f1dbff",
+  B: "#ffe8bf",
+  C: "#d9f2ff",
+};
+const VARIANT_COLOR_BY_TYPE = {
+  turbo: {
+    A: { color: "#2f7dff", soft: "#d9e8ff", solid: "#c4dcff" }, // A蓝
+    B: { color: "#2fb96c", soft: "#d7f5e4", solid: "#c0efda" }, // B绿
+    C: { color: "#e14f4f", soft: "#ffd9dd", solid: "#ffc6cd" }, // C红
+  },
+  ecu: {
+    A: { color: "#e14f4f", soft: "#ffd9dd", solid: "#ffc6cd" }, // A红
+    B: { color: "#2fb96c", soft: "#d7f5e4", solid: "#c0efda" }, // B绿
+    C: { color: "#2f7dff", soft: "#d9e8ff", solid: "#c4dcff" }, // C蓝
+  },
+  suspension: {
+    A: { color: "#e14f4f", soft: "#ffd9dd", solid: "#ffc6cd" }, // A红
+    B: { color: "#2f7dff", soft: "#d9e8ff", solid: "#c4dcff" }, // B蓝
+    C: { color: "#2fb96c", soft: "#d7f5e4", solid: "#c0efda" }, // C绿
+  },
+  tires: {
+    A: { color: "#e14f4f", soft: "#ffd9dd", solid: "#ffc6cd" }, // A红
+    B: { color: "#2f7dff", soft: "#d9e8ff", solid: "#c4dcff" }, // B蓝
+    C: { color: "#2fb96c", soft: "#d7f5e4", solid: "#c0efda" }, // C绿
+  },
+};
+const VARIANT_FALLBACK = {
+  A: { color: "#2f7dff", soft: "#d9e8ff", solid: "#c4dcff" },
+  B: { color: "#2fb96c", soft: "#d7f5e4", solid: "#c0efda" },
+  C: { color: "#e14f4f", soft: "#ffd9dd", solid: "#ffc6cd" },
+};
+const CATALOG_LABEL_KIND = {
+  PERMANENT: "permanent",
+  LIMITED: "limited",
+};
+const PART_TYPES = partsPayload?.partTypes && typeof partsPayload.partTypes === "object" ? partsPayload.partTypes : {};
+const PARTS_BY_TYPE = partsPayload?.partsByType && typeof partsPayload.partsByType === "object" ? partsPayload.partsByType : {};
+const ALL_PART_ROWS = Object.values(PARTS_BY_TYPE)
+  .flatMap((bucket) => (Array.isArray(bucket?.all) ? bucket.all : []))
+  .filter((row) => row && typeof row === "object");
+const PART_BY_ID = new Map();
+const PART_BY_PATHID = new Map();
+for (const row of ALL_PART_ROWS) {
+  const idKey = String(row?.id || row?.name || "").trim().toUpperCase();
+  if (idKey && !PART_BY_ID.has(idKey)) PART_BY_ID.set(idKey, row);
+  const pid = Number(row?.pathid);
+  if (Number.isFinite(pid) && pid > 0 && !PART_BY_PATHID.has(Math.floor(pid))) PART_BY_PATHID.set(Math.floor(pid), row);
+}
+const PART_GRADES = (Array.isArray(partsPayload?.grades) ? partsPayload.grades : ["C", "B", "A", "S"]).slice().sort((a, b) => {
+  const rank = { S: 0, A: 1, B: 2, C: 3 };
+  return (rank[String(a)] ?? 99) - (rank[String(b)] ?? 99);
+});
+const MAX_PRESETS_PER_CAR = 5;
+const PART_GRADE_FILTERS = ["ALL", ...PART_GRADES];
+
+function normalizeOptionRows(rows) {
+  return (Array.isArray(rows) ? rows : []).filter((r) => ALL_KEYS.includes(String(r?.key || "")));
+}
+
+function dedupeBreakthroughOptions(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const pid = Number(row?.pathid);
+    const key = Number.isFinite(pid) && pid > 0 ? `pid:${pid}` : `${String(row?.key || "")}:${String(row?.absolute || "")}:${String(row?.percent || "")}`;
+    if (!map.has(key)) map.set(key, row);
+  }
+  return [...map.values()];
+}
+
+const TYPE_BREAKTHROUGH_ALLOWED_KEYS = {
+  turbo: new Set(["MetaEarlyAcc", "MetaMidAcc", "MetaMaxSpeed", "MetaHandling"]),
+  ecu: new Set(["MetaEarlyAcc", "MetaMidAcc", "MetaMaxSpeed", "MetaHandling"]),
+  suspension: new Set(["MetaGrip", "MetaDrift", "MetaOffroad", "MetaBoostStrength", "MetaBoostDuration"]),
+  tires: new Set(["MetaGrip", "MetaDrift", "MetaOffroad", "MetaBoostStrength", "MetaBoostDuration"]),
+};
+
+const tier = ref("S");
+const level = ref(30);
+const includeSkinBonus = ref(false);
+const selectedSkinId = ref("");
+const skinsExpanded = ref(false);
+const skinsScrollRef = ref(null);
+const selectedTraitPathids = ref([]);
+const traitInitCarId = ref("");
+const archiveAppliedCarId = ref("");
+const isDrawerOpen = ref(false);
+const equippedParts = ref({ turbo: null, ecu: null, suspension: null, tires: null });
+const partIcons = Object.fromEntries(Object.entries(PART_TYPES).map(([k, v]) => [k, String(v?.icon || "?")]));
+const partSlotDefs = [
+  { key: "turbo", icon: "T" },
+  { key: "ecu", icon: "E" },
+  { key: "suspension", icon: "S" },
+  { key: "tires", icon: "W" },
+];
+const gradeColors = GRADE_COLORS;
+const modalPartType = ref(null);
+const modalGrade = ref("ALL");
+const modalSelectedPart = ref(null);
+const modalBreakthrough1 = ref("");
+const modalBreakthrough2 = ref("");
+const modalBreakthroughLevel1 = ref(1);
+const modalBreakthroughLevel2 = ref(1);
+const activeBreakthroughMenu = ref("");
+const breakthroughMenuPlacement = ref({ slot1: "down", slot2: "down" });
+const cloudBusy = ref(false);
+const cloudMsg = ref("");
+const cloudPresets = ref([]);
+const cloudPresetName = ref("");
+const selectedCloudPresetId = ref("");
+const mobileTuneCollapsed = ref(true);
+const isMobileDetail = ref(false);
+const showMobilePartList = ref(true);
+const cloudPresetDropdownOpen = ref(false);
+const cloudPresetDropdownRef = ref(null);
+const topbarActionsCollapsed = ref(false);
+const isVisitorDetailSource = computed(() => String(props.detailSource || "").trim().toLowerCase().startsWith("user_"));
+const canUseCloudPresetTools = computed(() => !isVisitorDetailSource.value);
+const isVisitorReadOnly = computed(() => isVisitorDetailSource.value);
+
+function normalizeTraitPathid(raw) {
+  const value = String(raw ?? "").trim();
+  if (!value || value === "0" || value === "NaN") return "";
+  return value;
+}
+
+function syncDetailViewport() {
+  if (typeof window === "undefined") return;
+  const mobile = window.matchMedia("(max-width: 720px)").matches;
+  if (mobile !== isMobileDetail.value) {
+    isMobileDetail.value = mobile;
+  }
+  if (!mobile) {
+    showMobilePartList.value = true;
+  }
+}
+
+function toggleCloudPresetDropdown() {
+  if (topbarActionsCollapsed.value) return;
+  if (!canUseCloudPresetTools.value) return;
+  if (!props.cloudUser) return;
+  cloudPresetDropdownOpen.value = !cloudPresetDropdownOpen.value;
+}
+
+function closeCloudPresetDropdown() {
+  cloudPresetDropdownOpen.value = false;
+}
+
+function handleDocumentPointerDown(evt) {
+  if (!cloudPresetDropdownOpen.value) return;
+  const root = cloudPresetDropdownRef.value;
+  const target = evt?.target;
+  if (root && target instanceof Node && root.contains(target)) return;
+  cloudPresetDropdownOpen.value = false;
+}
+
+function handleDocumentKeydown(evt) {
+  if (!cloudPresetDropdownOpen.value) return;
+  if (String(evt?.key || "") === "Escape") cloudPresetDropdownOpen.value = false;
+}
+
+function toggleTopbarActionsCollapsed() {
+  topbarActionsCollapsed.value = !topbarActionsCollapsed.value;
+  if (topbarActionsCollapsed.value) {
+    closeCloudPresetDropdown();
+  }
+}
+
+function scrollSkins(direction) {
+  const el = skinsScrollRef.value;
+  if (!el) return;
+  const delta = direction === "left" ? -220 : 220;
+  el.scrollBy({ left: delta, behavior: "smooth" });
+}
+
+function gradeTabStyle(grade) {
+  if (grade === "ALL") {
+    return modalGrade.value === "ALL" ? { background: "#e4ebf3", color: "#1a2838" } : {};
+  }
+  const c = GRADE_COLORS[grade] || "#2f435a";
+  const bg = GRADE_SOFT_BG[grade] || "rgba(47,67,90,0.1)";
+  if (modalGrade.value === grade) {
+    return {
+      background: bg,
+      color: c,
+      boxShadow: `inset 0 -3px 0 ${c}`,
+    };
+  }
+  return { color: c };
+}
+function partVisualStyle(part) {
+  const grade = String(part?.grade || "");
+  const type = String(part?.type || "");
+  const variant = String(part?.variant || "").toUpperCase();
+  const palette =
+    VARIANT_COLOR_BY_TYPE[type]?.[variant] ||
+    VARIANT_FALLBACK[variant] || { color: "#5f7a96", soft: "#e5eef6", solid: "#d6e3ef" };
+  return {
+    "--part-color": GRADE_COLORS[grade] || "#2f435a",
+    "--part-color-alt": GRADE_COLORS_ALT[grade] || GRADE_COLORS[grade] || "#2f435a",
+    "--part-bg": palette.soft,
+    "--variant-color": palette.color,
+    "--variant-bg-soft": palette.soft,
+    "--variant-bg-solid": palette.solid,
+  };
+}
+
+const rankClass = computed(() => `rank-${String(props.car?.initialRank || "c").toLowerCase()}`);
+const detailRankVisual = computed(() => {
+  const tier = String(props.car?.initialRank || "C").trim().toUpperCase();
+  if (tier === "SS" || tier === "SSS") return "sp";
+  if (tier === "S" || tier === "A" || tier === "B" || tier === "C") return tier.toLowerCase();
+  return "c";
+});
+
+function metaLabel(key) {
+  return locale.value === "en_us"
+    ? (META_LABELS_EN[key] || META_LABELS[key] || key)
+    : (META_LABELS[key] || META_LABELS_EN[key] || key);
+}
+
+function typeLabel(rawType) {
+  const raw = String(rawType || "").trim();
+  const normalized = raw.toLowerCase();
+  if (normalized === "肌肉" || normalized === "muscle") return t("roster.types.muscle");
+  if (normalized === "越野" || normalized === "offroad") return t("roster.types.offroad");
+  if (normalized === "改装" || normalized === "tuner") return t("roster.types.tuner");
+  if (normalized === "超跑" || normalized === "super") return t("roster.types.super");
+  return raw;
+}
+
+function tierLabel(rawTier) {
+  const tier = String(rawTier || "").trim().toUpperCase();
+  return locale.value === "en_us"
+    ? (TIER_EN[tier] || tier)
+    : (TIER_ZH[tier] || tier);
+}
+
+function partSlotLabel(slotKey) {
+  return t(`roster.detail.partSlots.${String(slotKey || "")}`);
+}
+
+function traitSourceLabel(sourceRaw) {
+  if (sourceRaw === "Upgrades") return t("roster.detail.baseTrait");
+  if (sourceRaw === "HiddenUpgrades") return t("roster.detail.hiddenBonus");
+  return sourceRaw || "-";
+}
+
+function breakdownGroupTitle(groupKey) {
+  return t(`roster.detail.breakdown.${String(groupKey || "")}`);
+}
+
+function conditionGroupLabel(groupKey) {
+  return t(`roster.detail.conditionGroups.${String(groupKey || "")}`);
+}
+const detailRankVisualClass = computed(() => `rank-v-${detailRankVisual.value}`);
+const archiveSourcePlayerIdNormalized = computed(() => String(props.archiveSourcePlayerId || "").trim().toUpperCase());
+const selfPlayerIdNormalized = computed(() => String(props.selfPlayerId || "").trim().toUpperCase());
+const isSelfArchiveData = computed(() => {
+  if (!archiveSourcePlayerIdNormalized.value || !selfPlayerIdNormalized.value) return false;
+  return archiveSourcePlayerIdNormalized.value === selfPlayerIdNormalized.value;
+});
+const archiveStateText = computed(() => {
+  if (!props.archiveReadEnabled) return t("roster.detail.archiveState.previewNoArchive");
+  if (!archiveSourcePlayerIdNormalized.value) return t("roster.detail.archiveState.previewNoSource");
+  if (isSelfArchiveData.value) return t("roster.detail.archiveState.archive");
+  return t("roster.detail.archiveState.visitorArchive");
+});
+const visitorTargetPlayerId = computed(() => {
+  if (!isVisitorDetailSource.value) return "";
+  const src = String(props.detailSource || "").trim();
+  const fromDetailSource = src.replace(/^user_/i, "").trim().toUpperCase();
+  if (fromDetailSource) return fromDetailSource;
+  return archiveSourcePlayerIdNormalized.value || "";
+});
+const visitorProfileSource = computed(() => (props.visitorProfile && typeof props.visitorProfile === "object" ? props.visitorProfile : null));
+const visitorOwnerDisplayName = computed(() => {
+  const fromProfile = String(visitorProfileSource.value?.displayName || "").trim();
+  if (fromProfile) return fromProfile;
+  return visitorTargetPlayerId.value || t("roster.detail.visitorOwnerFallback");
+});
+const visitorOwnerPrimaryTitle = computed(() => {
+  return pickTopTitle(visitorProfileSource.value?.primaryTitle, visitorProfileSource.value?.titles, {});
+});
+const visitorOwnerAvatarUrl = computed(() => String(visitorProfileSource.value?.avatarUrl || "").trim());
+const visitorOwnerSignature = computed(() => String(visitorProfileSource.value?.signature || "").trim());
+const visitorOwnerSignatureSummary = computed(() => {
+  const raw = visitorOwnerSignature.value.replace(/\s+/g, " ").trim();
+  if (!raw) return "";
+  if (raw.length <= 32) return raw;
+  return `${raw.slice(0, 32).trim()}...`;
+});
+const visitorPreviewTopbarText = computed(() => {
+  if (!visitorTargetPlayerId.value) return "";
+  return t("roster.detail.visitorTopbar", {
+    name: visitorOwnerDisplayName.value,
+    playerId: visitorTargetPlayerId.value,
+  });
+});
+const visitorPreviewCardText = computed(() => {
+  return t("roster.detail.visitorCard", { name: visitorOwnerDisplayName.value });
+});
+const visitorOwnerPlayerIdText = computed(() => (
+  visitorTargetPlayerId.value
+    ? t("roster.detail.visitorPlayerId", { playerId: visitorTargetPlayerId.value })
+    : t("roster.detail.visitorLoading")
+));
+const visitorOwnerCardPending = computed(() => Boolean(isVisitorDetailSource.value && !visitorProfileSource.value));
+const visitorOwnerCardClickable = computed(() => Boolean(visitorTargetPlayerId.value && typeof props.openVisitorProfile === "function"));
+const syncArchiveButtonText = computed(() => {
+  if (cloudBusy.value) return t("roster.detail.syncArchive.loading");
+  if (props.archiveAutoSync && props.archiveReadEnabled) return t("roster.detail.syncArchive.resync");
+  return t("roster.detail.syncArchive.sync");
+});
+
+function openVisitorOwnerProfile() {
+  if (!visitorOwnerCardClickable.value) return;
+  props.openVisitorProfile({
+    playerId: visitorTargetPlayerId.value,
+    authorDisplayName: visitorOwnerDisplayName.value,
+    authorName: visitorOwnerDisplayName.value,
+    authorAvatarUrl: visitorOwnerAvatarUrl.value,
+    authorPrimaryTitle: visitorOwnerPrimaryTitle.value,
+    authorTitles: Array.isArray(visitorProfileSource.value?.titles) ? visitorProfileSource.value.titles : [],
+    authorSignature: visitorOwnerSignature.value,
+    authorFollowingCount: Number(visitorProfileSource.value?.followingCount || 0),
+    authorFollowerCount: Number(visitorProfileSource.value?.followerCount || 0),
+    authorUserId: Number(visitorProfileSource.value?.id || 0),
+    userId: Number(visitorProfileSource.value?.id || 0),
+  });
+}
+
+function onToggleArchiveRead(evt) {
+  if (isVisitorReadOnly.value) return;
+  emit("update:archive-read-enabled", Boolean(evt?.target?.checked));
+}
+
+const carNameZh = computed(() => {
+  const direct = String(props.car?.name || "").trim();
+  if (direct) return direct;
+  const raw = String(props.car?.displayName || props.car?.display || props.car?.id || "").trim();
+  const cleaned = raw.replace(/\s*[（(][^（）()]*[)）]\s*$/, "").trim();
+  return cleaned || raw;
+});
+const carNameEn = computed(() => {
+  const en = String(props.car?.nameEn || "").trim();
+  return en || String(props.car?.id || "");
+});
+const carPrimaryName = computed(() => {
+  if (locale.value === "en_us") return carNameEn.value || carNameZh.value;
+  return carNameZh.value || carNameEn.value;
+});
+const carSecondaryName = computed(() => "");
+
+const zeroStats = () => Object.fromEntries(ALL_KEYS.map((k) => [k, 0]));
+
+function n(v) {
+  const x = Number(v);
+  return Number.isFinite(x) ? x : 0;
+}
+
+function panelInt(v) {
+  return Math.round(n(v));
+}
+
+function sumRows(rows) {
+  const out = { absolute: 0, percent: 0 };
+  for (const r of rows) {
+    out.absolute += n(r.absolute);
+    out.percent += n(r.percent);
+  }
+  return out;
+}
+
+function fmtSigned(v, fixed = 2) {
+  const num = n(v);
+  if (Math.abs(num) < 1e-9) return "0";
+  const p = Number(num.toFixed(fixed));
+  return `${p >= 0 ? "+" : ""}${p}`;
+}
+
+function fmtSignedPct(v, fixed = 2) {
+  const p = n(v) * 100;
+  if (Math.abs(p) < 1e-9) return "0%";
+  return `${p >= 0 ? "+" : ""}${Number(p.toFixed(fixed))}%`;
+}
+function fmtPartEffect(effect) {
+  const abs = n(effect?.absolute);
+  const pct = n(effect?.percent);
+  if (Math.abs(abs) > 1e-9 && Math.abs(pct) > 1e-9) return `${fmtSigned(abs)} / ${fmtSignedPct(pct)}`;
+  if (Math.abs(abs) > 1e-9) return fmtSigned(abs);
+  if (Math.abs(pct) > 1e-9) return fmtSignedPct(pct);
+  return "0";
+}
+
+function isPlaceholderText(v) {
+  const s = String(v || "").trim();
+  return !s || s === "常驻/条件见说明";
+}
+
+function fmtTraitNum(v) {
+  return Number(n(v).toFixed(2)).toString();
+}
+
+function parseHiddenValues(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return null;
+  const limMatch = s.match(/Limit\s*=\s*(-?\d+)/i);
+  if (!limMatch) return null;
+  const p1Match = s.match(/Param1\s*=\s*(-?\d+(?:\.\d+)?)/i);
+  return {
+    limit: Number(limMatch[1]),
+    param1: p1Match ? Number(p1Match[1]) : 0,
+  };
+}
+
+function conditionTextFromLimit(limit, param1) {
+  if (Number(limit) === 11) return "在比赛车 开始时";
+  const tpl = LIMIT_TO_CONDITION_ZH[Number(limit)];
+  if (!tpl) return "";
+  let p = Number(param1);
+  // `*_First*` mods are encoded in 0.5s units in source data (e.g. 16 => 8s).
+  if (Number(limit) === 1 && Number.isFinite(p) && Math.abs(p) > 1e-9) p /= 2;
+  return tpl.replace("{0}", fmtTraitNum(p));
+}
+
+function parseRequirementFromConditionText(rawText) {
+  const text = String(rawText || "").trim();
+  if (!text) return null;
+  const numMatch = text.match(/大于等于\s*(-?\d+(?:\.\d+)?)/);
+  if (!numMatch) return null;
+  const threshold = Number(numMatch[1]);
+  if (!Number.isFinite(threshold)) return null;
+  for (const [alias, key] of REQUIREMENT_KEY_ALIASES) {
+    if (text.includes(alias)) return { key, threshold, alias };
+  }
+  return null;
+}
+
+function isRuntimeOnlyConditionText(rawText) {
+  const text = String(rawText || "").trim();
+  if (!text) return false;
+  if (parseRequirementFromConditionText(text)) return false;
+  return RUNTIME_CONDITION_PATTERNS.some((re) => re.test(text));
+}
+
+function firstEffectText(trait) {
+  const effects = Array.isArray(trait?.effects) ? trait.effects : [];
+  const e = effects.find((it) => Math.abs(n(it?.absolute)) > 1e-9 || Math.abs(n(it?.percent)) > 1e-9) || effects[0];
+  if (!e) return "";
+  const key = String(e.key || "");
+  const label = String(e.type_zh || e.labelZh || metaLabel(key) || "").trim();
+  if (!label) return "";
+  const abs = n(e.absolute);
+  const pct = n(e.percent);
+  if (Math.abs(pct) > 1e-9) return `${label}${fmtSignedPct(pct)}`;
+  if (Math.abs(abs) > 1e-9) return `${label}${fmtSigned(abs)}`;
+  return label;
+}
+
+function deriveTriggerText(trait) {
+  const effects = Array.isArray(trait?.effects) ? trait.effects : [];
+  const conditionFromEffect = effects.map((e) => String(e.condition_desc || e.conditionDesc || "").trim()).find((x) => x);
+  if (conditionFromEffect) {
+    const parsed = parseHiddenValues(conditionFromEffect);
+    if (parsed) {
+      const mapped = conditionTextFromLimit(parsed.limit, parsed.param1);
+      if (mapped) return mapped;
+    }
+    return conditionFromEffect;
+  }
+
+  const hidden = parseHiddenValues(trait?.hiddenValues || trait?.hidden_values);
+  if (hidden) {
+    const fromLimit = conditionTextFromLimit(hidden.limit, hidden.param1);
+    if (fromLimit) return fromLimit;
+  }
+
+  const fromBoostType = effects
+    .map((e) => BOOST_TRIGGER_BY_TYPE_ZH[Number(e.modifierType)])
+    .find((txt) => String(txt || "").trim());
+  if (fromBoostType) return fromBoostType;
+
+  const trigger = String(trait?.trigger || "").trim();
+  return isPlaceholderText(trigger) ? "" : trigger;
+}
+
+function deriveDescriptionText(trait) {
+  const allMainSummary = allMainSamePercentSummary(trait);
+  const trigger = deriveTriggerText(trait);
+  const primary = allMainSummary || firstEffectText(trait);
+  if (trigger && primary) return `${trigger}，${primary}`;
+  if (primary) return primary;
+  if (trigger) return trigger;
+  const raw = String(trait?.descriptionZh || trait?.description_zh || "").trim();
+  return isPlaceholderText(raw) ? "" : raw;
+}
+
+function lerp(v0, v1, t) {
+  return v0 + (v1 - v0) * t;
+}
+
+function traitNameZh(trait) {
+  const effectRows = Array.isArray(trait?.effects) ? trait.effects : [];
+  const mainPctRows = effectRows.filter((e) => MAIN_KEYS.includes(String(e?.key || "")) && Math.abs(n(e?.percent)) > 1e-9);
+  const nonZeroRows = effectRows.filter((e) => Math.abs(n(e?.absolute)) > 1e-9 || Math.abs(n(e?.percent)) > 1e-9);
+  if (
+    mainPctRows.length >= 4 &&
+    MAIN_KEYS.every((k) => mainPctRows.some((e) => String(e.key) === k)) &&
+    mainPctRows.every((e) => Math.abs(n(e.absolute)) < 1e-9) &&
+    nonZeroRows.length === mainPctRows.length
+  ) {
+    const basePct = n(mainPctRows[0]?.percent);
+    const samePct = mainPctRows.every((e) => Math.abs(n(e.percent) - basePct) < 1e-9);
+    if (samePct) return `主要属性${fmtSignedPct(basePct)}`;
+  }
+
+  const explicit = String(trait?.nameZh || trait?.name_zh || "").trim();
+  if (explicit) return explicit;
+  const desc = String(trait?.descriptionZh || trait?.description_zh || "").trim();
+  if (desc.includes("，")) {
+    const right = desc.split("，").slice(1).join("，").trim();
+    if (right) return right;
+  }
+  const effects = String(trait?.effectsZh || trait?.effects_zh || "").trim();
+  if (effects) {
+    const firstSeg = effects.split(";")[0]?.trim() || effects;
+    const stripped = firstSeg.replace(/^\[[^\]]+\]\s*/, "").trim();
+    if (stripped) return stripped;
+  }
+  return String(trait?.name || "未命名特性");
+}
+
+function traitNameEn(trait) {
+  const explicit = String(trait?.nameEn || trait?.name_en || "").trim();
+  if (explicit) return explicit;
+  const desc = String(trait?.descriptionEn || trait?.description_en || "").trim();
+  if (desc.includes(",")) {
+    const right = desc.split(",").slice(1).join(",").trim();
+    if (right) return right;
+  }
+  const effects = String(trait?.effectsEn || trait?.effects_en || "").trim();
+  if (effects) {
+    const firstSeg = effects.split(";")[0]?.trim() || effects;
+    const stripped = firstSeg.replace(/^\[[^\]]+\]\s*/, "").trim();
+    if (stripped) return stripped;
+  }
+  return String(trait?.name || t("roster.detail.unnamedTrait"));
+}
+
+function traitDisplayName(trait) {
+  return locale.value === "en_us" ? traitNameEn(trait) : traitNameZh(trait);
+}
+
+const availableTierOptions = computed(() => {
+  const map = props.detail?.tierStepBonus || {};
+  const hasStep = (step) => {
+    const row = map?.[step];
+    if (!row || typeof row !== "object") return false;
+    return MAIN_KEYS.some((k) => Math.abs(n(row[k])) > 1e-9);
+  };
+  let maxIdx = 3;
+  if (hasStep("RankupS2SPlus")) maxIdx = Math.max(maxIdx, 4);
+  if (hasStep("RankupS2SPlusPlus")) maxIdx = Math.max(maxIdx, 5);
+
+  const traitMax = (Array.isArray(props.detail?.traits) ? props.detail.traits : []).reduce((acc, tr) => {
+    const u = normalizeTierName(tr.unlockTier || tr.unlock_tier);
+    const idx = TIER_ORDER.indexOf(u);
+    return idx > acc ? idx : acc;
+  }, -1);
+  if (traitMax >= 0) maxIdx = Math.max(maxIdx, traitMax);
+
+  const initialTier = normalizeTierName(props.car?.initialRank || "C") || "C";
+  const minIdx = Math.max(0, TIER_ORDER.indexOf(initialTier));
+  return TIER_ORDER.filter((_, idx) => idx >= minIdx && idx <= maxIdx);
+});
+
+watch(
+  [() => props.car?.initialRank, availableTierOptions],
+  ([rank, options]) => {
+    const currentTier = normalizeTierName(tier.value);
+    if (currentTier && options.includes(currentTier)) return;
+    const r = normalizeTierName(rank || "S");
+    tier.value = options.includes(r) ? r : options[Math.min(3, options.length - 1)] || "S";
+  },
+  { immediate: true },
+);
+
+const skins = computed(() => {
+  const arr = Array.isArray(props.detail?.skins) ? props.detail.skins : [];
+  const filtered = arr.filter((skin) => {
+    if (skin?.isDefault) return true;
+    const rawName = String(skin?.name || "").trim();
+    if (!rawName) return false;
+    // Placeholder names like "XXX 涂装1" / "XXX SK1" are hidden directly.
+    const isGeneric = /(?:^|\s)(?:涂装\s*\d+|SK\s*\d+)\s*$/i.test(rawName);
+    if (isGeneric) return false;
+    return true;
+  });
+  if (filtered.length) return filtered;
+  return [
+    {
+      id: `${props.car.id}_default`,
+      key: props.car.id,
+      name: "默认涂装",
+      nameEn: "Default Skin",
+      image: props.car.image || "",
+      thumb: props.car.image || "",
+      isDefault: true,
+      rarityLabel: null,
+      priceText: null,
+    },
+  ];
+});
+
+function skinDisplayName(skin) {
+  if (skin?.isDefault) return locale.value === "en_us" ? "Default Skin" : "默认涂装";
+  const raw = String(locale.value === "en_us" ? (skin?.nameEn || skin?.name_en || skin?.name) : skin?.name || "").trim();
+  if (raw && !/\bSK\s*\d+\b/i.test(raw)) return raw;
+  const sourceKey = String(skin?.key || skin?.id || "");
+  const noMatch = sourceKey.match(/_sk(\d+)/i) || raw.match(/\bSK\s*(\d+)\b/i);
+  const carName = String(
+    locale.value === "en_us"
+      ? (carNameEn.value || props.car?.nameEn || props.car?.id || "Car")
+      : (carNameZh.value || props.car?.name || props.car?.id || "赛车"),
+  ).trim();
+  if (noMatch) return locale.value === "en_us" ? `${carName} Skin ${noMatch[1]}` : `${carName} 涂装${noMatch[1]}`;
+  return raw || (locale.value === "en_us" ? `${carName} Skin` : `${carName} 涂装`);
+}
+
+function selectedSkinDisplayName() {
+  return skinDisplayName(selectedSkin.value || null) || carPrimaryName.value;
+}
+
+function partDisplayName(part) {
+  if (!part || typeof part !== "object") return t("roster.detail.partFallbackName");
+  if (locale.value === "en_us") {
+    return String(part?.displayNameEn || part?.nameEn || part?.displayName || part?.displayNameZh || part?.name || "").trim()
+      || t("roster.detail.partFallbackName");
+  }
+  return String(part?.displayNameZh || part?.displayName || part?.name || part?.nameEn || "").trim()
+    || t("roster.detail.partFallbackName");
+}
+
+function partGradeLabel(grade) {
+  return t("roster.detail.partModal.gradeTag", { grade });
+}
+
+function partVariantLabel(variant) {
+  return t("roster.detail.partModal.variantTag", { variant });
+}
+
+function normalizeSkinKeyForOwnership(raw) {
+  let out = String(raw || "").trim().toUpperCase();
+  if (!out) return "";
+  out = out.replace(/[\s-]+/g, "_");
+  out = out.replace(/_SKIN_?(\d+)/g, "_SK$1");
+  out = out.replace(/SKIN_?(\d+)/g, "_SK$1");
+  out = out.replace(/__+/g, "_");
+  return out;
+}
+
+function expandSkinOwnershipKeys(raw, carId = "") {
+  const out = new Set();
+  const normalized = normalizeSkinKeyForOwnership(raw);
+  if (!normalized) return out;
+  out.add(normalized);
+  const car = String(carId || "").trim().toUpperCase();
+  const alreadyQualifiedSkinId = /^[A-Z0-9]+_SK\d{1,3}$/i.test(normalized);
+
+  const justNo = normalized.match(/^(\d{1,3})$/);
+  if (justNo) {
+    const no = Number(justNo[1]);
+    if (Number.isFinite(no) && no > 0) {
+      out.add(`SK${no}`);
+      if (car) out.add(`${car}_SK${no}`);
+    }
+  }
+
+  const plainSkNo = normalized.match(/^SK(\d{1,3})$/);
+  if (plainSkNo && car) {
+    const no = Number(plainSkNo[1]);
+    if (Number.isFinite(no) && no > 0) out.add(`${car}_SK${no}`);
+  }
+
+  if (car && !alreadyQualifiedSkinId) {
+    const suffixNo = normalized.match(/(?:^|_)SK(\d{1,3})$/);
+    if (suffixNo) {
+      const no = Number(suffixNo[1]);
+      if (Number.isFinite(no) && no > 0) out.add(`${car}_SK${no}`);
+    }
+  }
+  return out;
+}
+
+function collectSkinOwnershipRawRows(input, depth = 0, out = []) {
+  if (depth > 6 || input === null || input === undefined) return out;
+  if (typeof input === "string" || typeof input === "number") {
+    const text = String(input || "").trim();
+    if (text) out.push(text);
+    return out;
+  }
+  if (Array.isArray(input)) {
+    for (const row of input) collectSkinOwnershipRawRows(row, depth + 1, out);
+    return out;
+  }
+  if (typeof input !== "object") return out;
+  const src = input;
+  const directKeys = [
+    "skinId",
+    "SkinId",
+    "SkinID",
+    "skin",
+    "Skin",
+    "id",
+    "ID",
+    "key",
+    "name",
+    "Name",
+    "value",
+    "Value",
+  ];
+  for (const key of directKeys) {
+    const text = String(src?.[key] || "").trim();
+    if (text) out.push(text);
+  }
+  for (const [k, v] of Object.entries(src)) {
+    const key = String(k || "").trim();
+    if (key) out.push(key);
+    if (/(skin|skins|owned|unlock|inventory|list|items|values?)/i.test(key)) {
+      collectSkinOwnershipRawRows(v, depth + 1, out);
+    }
+  }
+  return out;
+}
+
+function getCurrentArchiveCarConfig() {
+  const carId = String(props.car?.id || "").trim().toUpperCase();
+  const garageMap = props.archiveGarageState && typeof props.archiveGarageState === "object" ? props.archiveGarageState : {};
+  return garageMap?.[carId] || garageMap?.[String(props.car?.id || "").trim()] || null;
+}
+
+const ownedSkinKeySet = computed(() => {
+  const inventory = props.archiveGarageInventory && typeof props.archiveGarageInventory === "object" ? props.archiveGarageInventory : {};
+  const source = Array.isArray(inventory?.skinsOwned) ? inventory.skinsOwned : [];
+  const out = new Set();
+  const carId = String(props.car?.id || "").trim().toUpperCase();
+  for (const row of source) {
+    for (const raw of collectSkinOwnershipRawRows(row)) {
+      for (const key of expandSkinOwnershipKeys(raw, carId)) out.add(key);
+    }
+  }
+  const cfg = getCurrentArchiveCarConfig();
+  if (cfg && typeof cfg === "object") {
+    const cfgBuckets = [
+      cfg?.skinsOwned,
+      cfg?.ownedSkins,
+      cfg?.unlockedSkins,
+      cfg?.skinIds,
+      cfg?.skins,
+      cfg?.skinMap,
+    ];
+    for (const raw of collectSkinOwnershipRawRows(cfgBuckets)) {
+      for (const key of expandSkinOwnershipKeys(raw, carId)) out.add(key);
+    }
+  }
+  return out;
+});
+
+function isSkinOwned(skin) {
+  if (skin?.isDefault) return true;
+  const carId = String(props.car?.id || "").trim().toUpperCase();
+  const candidates = [skin?.id, skin?.key, skin?.name, skin?.nameEn]
+    .flatMap((v) => [...expandSkinOwnershipKeys(v, carId)])
+    .filter(Boolean);
+  return candidates.some((key) => ownedSkinKeySet.value.has(key));
+}
+
+function skinMetaText(skin) {
+  return isSkinOwned(skin) ? t("roster.detail.skinOwned") : t("roster.detail.skinUnowned");
+}
+
+function skinMetaClass(skin) {
+  return isSkinOwned(skin) ? "skin-meta--owned" : "skin-meta--unowned";
+}
+
+function normalizeCatalogLabelKind(raw) {
+  const key = String(raw || "").trim().toLowerCase();
+  if (key === CATALOG_LABEL_KIND.PERMANENT || key === CATALOG_LABEL_KIND.LIMITED) return key;
+  return CATALOG_LABEL_KIND.PERMANENT;
+}
+
+function normalizeCatalogLabelEntry(raw, { allowLegendary = true } = {}) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  return {
+    enabled: Boolean(src.enabled),
+    kind: normalizeCatalogLabelKind(src.kind),
+    legendary: allowLegendary ? Boolean(src.legendary) : false,
+  };
+}
+
+const skinCatalogLabelMap = computed(() => {
+  const out = {};
+  for (const skin of skins.value) {
+    const skinId = String(skin?.id || skin?.key || "").trim().toUpperCase();
+    if (!skinId) continue;
+    const row = normalizeCatalogLabelEntry(props.catalogLabelConfig?.skins?.[skinId], { allowLegendary: false });
+    if (!row.enabled) continue;
+    out[skinId] = {
+      text: row.kind === CATALOG_LABEL_KIND.LIMITED ? t("roster.detail.catalogLimited") : t("roster.detail.catalogPermanent"),
+      variant: row.kind === CATALOG_LABEL_KIND.LIMITED ? "limited" : "permanent",
+    };
+  }
+  return out;
+});
+
+function skinCatalogLabel(skin) {
+  const skinId = String(skin?.id || skin?.key || "").trim().toUpperCase();
+  if (!skinId) return null;
+  return skinCatalogLabelMap.value?.[skinId] || null;
+}
+
+const carCatalogLabel = computed(() => {
+  const direct = props.car?.catalogLabel;
+  if (direct && typeof direct === "object" && String(direct?.text || "").trim()) {
+    return {
+      text: String(direct.text).trim(),
+      variant: String(direct.variant || "permanent").trim() || "permanent",
+    };
+  }
+  const carId = String(props.car?.id || "").trim().toUpperCase();
+  if (!carId) return null;
+  const row = normalizeCatalogLabelEntry(props.catalogLabelConfig?.cars?.[carId], { allowLegendary: true });
+  if (!row.enabled) return null;
+  if (row.legendary) return { text: t("roster.card.legendaryAlt"), variant: "legendary" };
+  return {
+    text: row.kind === CATALOG_LABEL_KIND.LIMITED ? t("roster.detail.catalogLimited") : t("roster.detail.catalogPermanent"),
+    variant: row.kind === CATALOG_LABEL_KIND.LIMITED ? "limited" : "permanent",
+  };
+});
+
+watch(
+  skins,
+  (list) => {
+    const current = String(selectedSkinId.value || "");
+    if (!list.some((s) => String(s.id) === current)) {
+      selectedSkinId.value = String(list[0]?.id || "");
+    }
+  },
+  { immediate: true },
+);
+
+const selectedSkin = computed(() => skins.value.find((s) => String(s.id) === selectedSkinId.value) || skins.value[0] || null);
+const selectedSkinCatalogLabel = computed(() => skinCatalogLabel(selectedSkin.value));
+const isSelectedSkinLimited = computed(() => selectedSkinCatalogLabel.value?.variant === "limited");
+const legendaryTypeIconUrl = computed(() => resolveRemoteAssetUrl("/ui/SP_Car_Type_Classic_Icon_CN.png"));
+const limitedIconUrl = computed(() => resolveRemoteAssetUrl("/ui/limited-icon-cn.png"));
+const assetSrc = (raw) => resolveRemoteAssetUrl(String(raw || "").trim());
+const LEGACY_PART_IMAGE_BY_TYPE_AND_KEY = {
+  turbo: {
+    MetaDrift: "Turbo_Drift.png",
+    MetaBoostDuration: "Turbo_BoostDuration.png",
+    MetaBoostStrength: "Turbo_BoostStrength.png",
+  },
+  ecu: {
+    MetaGrip: "ECU_Grip.png",
+    MetaBoostDuration: "ECU_BoostDuration.png",
+    MetaBoostStrength: "ECU_BoostStrength.png",
+  },
+  suspension: {
+    MetaDrift: "Damper_Drift.png",
+    MetaGrip: "Damper_Grip.png",
+    MetaOffroad: "Damper_Offroad.png",
+  },
+  tires: {
+    MetaDrift: "Tire_Drift.png",
+    MetaGrip: "Tire_Grip.png",
+    MetaOffroad: "Tire_Offroad.png",
+  },
+};
+
+function normalizePartIdForLookup(raw) {
+  return String(raw || "").trim().toUpperCase();
+}
+
+function inferPartFromLookup(rawPart, slotType = "") {
+  const src = rawPart && typeof rawPart === "object" ? rawPart : {};
+  const idCandidates = [
+    src?.id,
+    src?.name,
+    src?.partId,
+    src?.sourcePartId,
+    src?.DefID,
+    src?.defId,
+    src?.ID,
+  ].map((v) => normalizePartIdForLookup(v)).filter(Boolean);
+  for (const key of idCandidates) {
+    if (PART_BY_ID.has(key)) return PART_BY_ID.get(key);
+  }
+  const pid = Number(src?.pathid);
+  if (Number.isFinite(pid) && pid > 0 && PART_BY_PATHID.has(Math.floor(pid))) {
+    return PART_BY_PATHID.get(Math.floor(pid));
+  }
+  const typeKey = String(src?.type || slotType || "").trim();
+  const grade = String(src?.grade || "").trim();
+  const variant = String(src?.variant || "").trim().toUpperCase();
+  if (!typeKey || !PARTS_BY_TYPE[typeKey]) return null;
+  const rows = Array.isArray(PARTS_BY_TYPE[typeKey]?.all) ? PARTS_BY_TYPE[typeKey].all : [];
+  if (grade && variant) {
+    const strict = rows.find((row) => String(row?.grade || "") === grade && String(row?.variant || "").toUpperCase() === variant);
+    if (strict) return strict;
+  }
+  return rows[0] || null;
+}
+
+function resolvePartImagePath(part) {
+  const src = part && typeof part === "object" ? part : {};
+  const direct = String(src?.image || "").trim();
+  if (direct && !/\/part-icons\/(?:Turbo|ECU|Damper|Tire)[A-Z]\w*\.png$/i.test(direct)) {
+    return direct;
+  }
+  const typeKey = String(src?.type || "").trim();
+  const effectRows = [
+    ...(Array.isArray(src?.subEffects) ? src.subEffects : []),
+    ...(Array.isArray(src?.effects) ? src.effects : []),
+  ];
+  const subKey = effectRows
+    .map((row) => String(row?.key || "").trim())
+    .find((key) => SUB_KEYS.includes(key));
+  const mapped = LEGACY_PART_IMAGE_BY_TYPE_AND_KEY[typeKey]?.[subKey];
+  if (mapped) return `/part-icons/${mapped}`;
+  return direct;
+}
+
+function normalizedPartRecord(rawPart, slotType = "") {
+  const src = rawPart && typeof rawPart === "object" ? rawPart : {};
+  const canonical = inferPartFromLookup(src, slotType);
+  const merged = canonical ? {
+    ...canonical,
+    ...src,
+    effects: Array.isArray(src?.effects) && src.effects.length ? src.effects : canonical.effects,
+    mainEffects: Array.isArray(src?.mainEffects) && src.mainEffects.length ? src.mainEffects : canonical.mainEffects,
+    subEffects: Array.isArray(src?.subEffects) && src.subEffects.length ? src.subEffects : canonical.subEffects,
+    breakthroughOptions: Array.isArray(src?.breakthroughOptions) && src.breakthroughOptions.length
+      ? src.breakthroughOptions
+      : canonical.breakthroughOptions,
+  } : src;
+  const image = resolvePartImagePath(merged);
+  return image ? { ...merged, image } : merged;
+}
+
+function partImageSrc(part) {
+  return assetSrc(resolvePartImagePath(part));
+}
+
+function onPartImageError(event, part, kind, note = "") {
+  const urls = [];
+  const primary = assetSrc(String(part?.image || "").trim());
+  if (primary) urls.push(primary);
+  const mapped = assetSrc(resolvePartImagePath(part));
+  if (mapped && !urls.includes(mapped)) urls.push(mapped);
+  applyImageFallback(event, urls.slice(1), kind, note);
+}
+
+const selectedSkinImageSrc = computed(() => assetSrc(selectedSkin.value?.image || props.car?.image || ""));
+const selectedSkinImageKey = computed(() => `${String(props.car?.id || "").trim().toUpperCase()}::${String(selectedSkin.value?.id || "").trim()}::${selectedSkinImageSrc.value}`);
+
+const CAR_ID_IMAGE_ALIASES = {
+  FEROCE: ["MANNIU"],
+  MANNIU: ["FEROCE"],
+  EQUESTRO: ["MUCHEN"],
+  MUCHEN: ["EQUESTRO"],
+  ZERYN: ["LIREN"],
+  LIREN: ["ZERYN"],
+  LUMINO: ["GUANGZHUI"],
+  GUANGZHUI: ["LUMINO"],
+};
+
+function extractCarIdFromAssetUrl(rawUrl) {
+  const text = String(rawUrl || "").trim();
+  if (!text) return "";
+  const skinMatch = text.match(/\/car-skins\/([^/_?]+)_sk\d+\.[^/?#]+(?:\?[^#]*)?$/i);
+  if (skinMatch?.[1]) return String(skinMatch[1]).trim().toUpperCase();
+  const spriteMatch = text.match(/\/car-sprites\/([^/.?]+)\.[^/?#]+(?:\?[^#]*)?$/i);
+  if (spriteMatch?.[1]) return String(spriteMatch[1]).trim().toUpperCase();
+  return "";
+}
+
+function replaceCarIdInAssetUrl(rawUrl, nextId) {
+  const text = String(rawUrl || "").trim();
+  const carId = String(nextId || "").trim().toUpperCase();
+  if (!text || !carId) return text;
+  let out = text;
+  out = out.replace(/(\/car-skins\/)([^/_?]+)(_sk\d+\.[^/?#]+(?:\?[^#]*)?)$/i, `$1${encodeURIComponent(carId)}$3`);
+  out = out.replace(/(\/car-sprites\/)([^/.?]+)(\.[^/?#]+(?:\?[^#]*)?)$/i, `$1${encodeURIComponent(carId)}$3`);
+  return out;
+}
+
+function resolveCarIdAliasCandidates(...sources) {
+  const queue = [];
+  for (const raw of sources) {
+    const text = String(raw || "").trim();
+    if (!text) continue;
+    const normalized = text.toUpperCase();
+    queue.push(normalized);
+    if (/_SK\d+$/i.test(normalized)) queue.push(normalized.replace(/_SK\d+$/i, ""));
+  }
+  const seen = new Set();
+  const out = [];
+  while (queue.length) {
+    const id = String(queue.shift() || "").trim().toUpperCase();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    const aliases = Array.isArray(CAR_ID_IMAGE_ALIASES[id]) ? CAR_ID_IMAGE_ALIASES[id] : [];
+    for (const alias of aliases) queue.push(alias);
+  }
+  return out;
+}
+
+function buildAssetFallbackCandidates(rawUrl, ...idSources) {
+  const primary = assetSrc(rawUrl);
+  if (!primary) return [];
+  const carIds = resolveCarIdAliasCandidates(extractCarIdFromAssetUrl(primary), ...idSources);
+  const out = [primary];
+  for (const id of carIds) {
+    const replaced = replaceCarIdInAssetUrl(primary, id);
+    if (replaced && !out.includes(replaced)) out.push(replaced);
+  }
+  return out;
+}
+
+const selectedSkinImageFallbacks = computed(() =>
+  buildAssetFallbackCandidates(
+    selectedSkin.value?.image || props.car?.image || "",
+    props.car?.id,
+    selectedSkin.value?.id,
+  ).slice(1),
+);
+
+function applyImageFallback(event, fallbackUrls, kind, note = "") {
+  const target = event?.target;
+  if (!(target instanceof HTMLImageElement)) {
+    reportDetailAssetFailure(kind, event, note);
+    return;
+  }
+  const rows = Array.isArray(fallbackUrls) ? fallbackUrls.filter(Boolean) : [];
+  if (!rows.length) {
+    reportDetailAssetFailure(kind, event, note);
+    return;
+  }
+  const nextIndex = Number(target.dataset.wikiFallbackIndex || 0);
+  if (nextIndex < rows.length) {
+    target.dataset.wikiFallbackIndex = String(nextIndex + 1);
+    target.src = rows[nextIndex];
+    return;
+  }
+  reportDetailAssetFailure(kind, event, note);
+}
+
+function onMainImageError(event) {
+  applyImageFallback(event, selectedSkinImageFallbacks.value, "detail-car-image", "hero-image-failed");
+}
+
+function onSkinPreviewError(event, skin) {
+  const urls = buildAssetFallbackCandidates(
+    skin?.thumb || skin?.image || "",
+    props.car?.id,
+    skin?.id,
+  ).slice(1);
+  applyImageFallback(event, urls, "skin-preview-image", String(skin?.id || ""));
+}
+
+function reportDetailAssetFailure(kind, event, note = "") {
+  const failedSrc = String(event?.target?.currentSrc || event?.target?.src || "").trim();
+  reportAssetLoadFailure({
+    kind,
+    src: failedSrc,
+    resolvedSrc: failedSrc,
+    component: "CarDetailPage",
+    carId: props.car?.id,
+    note,
+  });
+}
+const showcaseCardLabel = computed(() => {
+  if (isSelectedSkinLimited.value) {
+    return { text: t("roster.detail.catalogLimited"), variant: "limited-skin" };
+  }
+  return carCatalogLabel.value;
+});
+
+const tierIndex = computed(() => Math.max(0, TIER_ORDER.indexOf(String(tier.value || "S").toUpperCase())));
+const levelClamped = computed(() => Math.max(1, Math.min(30, Number(level.value) || 1)));
+const levelT = computed(() => (levelClamped.value - 1) / 29);
+
+const tierGrowth = computed(() => {
+  const out = zeroStats();
+  const map = props.detail?.tierStepBonus || {};
+  for (let i = 0; i < tierIndex.value; i += 1) {
+    const stepKey = RANK_STEPS[i];
+    const row = map?.[stepKey] || {};
+    for (const k of MAIN_KEYS) {
+      out[k] += n(row[k]);
+    }
+  }
+  return out;
+});
+
+const baseRaw = computed(() => {
+  const mainMin = props.detail?.baseMin || {};
+  const mainMax = props.detail?.baseMax || {};
+  const metaMin = props.detail?.baseMinMetaFull || {};
+  const metaMax = props.detail?.baseMaxMetaFull || {};
+  const hidden = props.detail?.hiddenBonus || {};
+  const out = zeroStats();
+  for (const k of MAIN_KEYS) {
+    const lvBase = lerp(n(mainMin[k]), n(mainMax[k]), levelT.value);
+    out[k] = lvBase + n(hidden[k]);
+  }
+  for (const k of SUB_KEYS) {
+    out[k] = lerp(n(metaMin[k]), n(metaMax[k]), levelT.value);
+  }
+  return out;
+});
+
+const afterTier = computed(() => {
+  const out = zeroStats();
+  for (const k of ALL_KEYS) out[k] = baseRaw.value[k] + tierGrowth.value[k];
+  return out;
+});
+
+function parseSkinBonusBlock(rawBonus) {
+  const out = { absolute: zeroStats(), percent: zeroStats(), valid: false };
+  if (!rawBonus || typeof rawBonus !== "object") return out;
+  if (rawBonus.absolute || rawBonus.percent) {
+    const absPart = rawBonus.absolute && typeof rawBonus.absolute === "object" ? rawBonus.absolute : {};
+    const pctPart = rawBonus.percent && typeof rawBonus.percent === "object" ? rawBonus.percent : {};
+    for (const k of ALL_KEYS) {
+      out.absolute[k] = n(absPart[k]);
+      let pct = n(pctPart[k]);
+      if (Math.abs(pct) > 1) pct /= 100;
+      out.percent[k] = pct;
+    }
+    out.valid = ALL_KEYS.some((k) => Math.abs(out.absolute[k]) > 1e-9 || Math.abs(out.percent[k]) > 1e-9);
+    return out;
+  }
+  for (const k of ALL_KEYS) {
+    let pct = n(rawBonus[k]);
+    if (Math.abs(pct) > 1) pct /= 100;
+    out.percent[k] = pct;
+  }
+  out.valid = ALL_KEYS.some((k) => Math.abs(out.percent[k]) > 1e-9);
+  return out;
+}
+
+const skinContribution = computed(() => {
+  const out = {
+    absolute: zeroStats(),
+    percent: zeroStats(),
+    delta: zeroStats(),
+    source: "none",
+    sourceDesc: t("roster.detail.noSkinBonus"),
+  };
+  if (!includeSkinBonus.value) return out;
+
+  const explicit = parseSkinBonusBlock(selectedSkin.value?.bonus);
+  if (explicit.valid) {
+    for (const k of ALL_KEYS) {
+      out.absolute[k] = explicit.absolute[k];
+      out.percent[k] = explicit.percent[k];
+      out.delta[k] = explicit.absolute[k] + afterTier.value[k] * explicit.percent[k];
+    }
+    out.source = "skin_explicit";
+    out.sourceDesc = t("roster.detail.skinApplied", { name: selectedSkinDisplayName() });
+    return out;
+  }
+
+  const typeId = Number(props.car?.typeId ?? -1);
+  const key = SKIN_FALLBACK_TYPE_KEY[typeId];
+  if (!key) {
+    out.sourceDesc = t("roster.detail.noSkinBonus");
+    return out;
+  }
+
+  out.percent[key] = 0.06;
+  out.delta[key] = afterTier.value[key] * 0.06;
+  out.source = "default_type_fallback";
+  out.sourceDesc = t("roster.detail.skinApplied", {
+    name: selectedSkinDisplayName(),
+  });
+  return out;
+});
+
+const afterSkin = computed(() => {
+  const out = zeroStats();
+  for (const k of ALL_KEYS) out[k] = afterTier.value[k] + skinContribution.value.delta[k];
+  return out;
+});
+const partsContribution = computed(() => {
+  const out = {
+    absolute: zeroStats(),
+    percent: zeroStats(),
+    delta: zeroStats(),
+  };
+
+  for (const type of Object.keys(equippedParts.value)) {
+    const eq = equippedParts.value[type];
+    if (!eq) continue;
+    const effects = Array.isArray(eq.part?.effects) ? eq.part.effects : [];
+    for (const e of effects) {
+      const key = String(e?.key || "");
+      if (!ALL_KEYS.includes(key)) continue;
+      out.absolute[key] += n(e?.absolute);
+      out.percent[key] += n(e?.percent);
+    }
+    for (const bt of selectedBreakthroughRows(eq)) {
+      const key = String(bt?.key || "");
+      if (!ALL_KEYS.includes(key)) continue;
+      out.absolute[key] += n(bt?.absolute);
+      out.percent[key] += n(bt?.percent);
+    }
+  }
+
+  for (const key of ALL_KEYS) {
+    // Use pure vehicle base (after tier growth) as percent base to avoid cross-compounding with skin.
+    out.delta[key] = out.absolute[key] + afterTier.value[key] * out.percent[key];
+  }
+  return out;
+});
+
+const allTraits = computed(() => (Array.isArray(props.detail?.traits) ? props.detail.traits : []));
+
+const unlockedTraits = computed(() => {
+  const allow = new Set(TIER_ORDER.slice(0, tierIndex.value + 1));
+  return allTraits.value.filter((t) => {
+    const src = String(t.source || "");
+    if (src !== "Upgrades") return true;
+    return allow.has(String(t.unlockTier || t.unlock_tier || "").toUpperCase());
+  });
+});
+
+watch(
+  () => props.car?.id,
+  () => {
+    archiveAppliedCarId.value = "";
+    traitInitCarId.value = "";
+    selectedTraitPathids.value = [];
+    if (String(props.detailSource || "carlist").toLowerCase() === "carlist") {
+      applyBasePreviewConfig();
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  [() => props.car?.id, unlockedTraits],
+  ([carId, list]) => {
+    const available = new Set(list.map((t) => normalizeTraitPathid(t.pathid)).filter(Boolean));
+    const filtered = selectedTraitPathids.value
+      .map((pid) => normalizeTraitPathid(pid))
+      .filter((pid) => available.has(pid));
+    const hiddenDefaults = list
+      .filter((t) => String(t.source || "") === "HiddenUpgrades")
+      .map((t) => normalizeTraitPathid(t.pathid))
+      .filter(Boolean);
+    const currentCarId = String(carId || "");
+    const keepArchiveSelection = Boolean(
+      props.archiveReadEnabled &&
+      archiveAppliedCarId.value &&
+      archiveAppliedCarId.value.toUpperCase() === currentCarId.toUpperCase(),
+    );
+
+    // Align with car_panel_gui default: hidden bonuses checked by default per car.
+    if (currentCarId && traitInitCarId.value !== currentCarId && list.length) {
+      if (keepArchiveSelection) {
+        selectedTraitPathids.value = Array.from(new Set([...filtered, ...hiddenDefaults]));
+        traitInitCarId.value = currentCarId;
+        return;
+      }
+      selectedTraitPathids.value = defaultTraitPathidsForTier(tier.value);
+      traitInitCarId.value = currentCarId;
+      return;
+    }
+
+    // Hidden upgrades are enforced and cannot be unchecked.
+    selectedTraitPathids.value = Array.from(new Set([...filtered, ...hiddenDefaults]));
+  },
+  { immediate: true },
+);
+
+const selectedTraitSet = computed(() => new Set(selectedTraitPathids.value.map((v) => normalizeTraitPathid(v)).filter(Boolean)));
+const selectedTraits = computed(() => unlockedTraits.value.filter((t) => selectedTraitSet.value.has(normalizeTraitPathid(t.pathid))));
+function isHiddenTrait(trait) {
+  return String(trait?.source || "") === "HiddenUpgrades";
+}
+
+function normalizeTraitEffect(e, trait) {
+  const key = String(e.key || "");
+  if (!ALL_KEYS.includes(key)) return null;
+  const hasCondition = Boolean(e.hasCondition || e.has_condition || trait.hasCondition || trait.has_condition);
+  return {
+    key,
+    label: e.labelZh || e.type_zh || metaLabel(key),
+    absolute: n(e.absolute),
+    percent: n(e.percent),
+    hasCondition,
+    conditionDesc: String(e.conditionDesc || e.condition_desc || "").trim(),
+    source: traitNameZh(trait),
+    sourceRaw: String(trait.name || "Trait"),
+    sourceType: String(trait.source || "Trait"),
+    unlockTier: String(trait.unlockTier || trait.unlock_tier || ""),
+    trigger: deriveTriggerText(trait),
+    descriptionZh: deriveDescriptionText(trait),
+    pathid: normalizeTraitPathid(trait.pathid),
+  };
+}
+
+const traitEffects = computed(() => {
+  const rows = [];
+  for (const trait of selectedTraits.value) {
+    // Hidden bonuses are already merged into baseRaw via detail.hiddenBonus.
+    // Do not apply them again as trait effects.
+    if (isHiddenTrait(trait)) continue;
+    const effects = Array.isArray(trait.effects) ? trait.effects : [];
+    for (const rawEffect of effects) {
+      const normalized = normalizeTraitEffect(rawEffect, trait);
+      if (normalized) rows.push(normalized);
+    }
+  }
+  return rows;
+});
+
+function resolveTraitFormulaZone(row) {
+  const tierText = String(row?.unlockTier || "").toUpperCase();
+  if (AS_MULTIPLY_TIERS.has(tierText)) return "as_multiply";
+  if (SSS_ADDITIVE_TIERS.has(tierText)) return "sss_additive";
+  return "ignored";
+}
+
+function panelReferenceValueForRequirement(key, alwaysAbs, alwaysPct, requirementAbs, requirementPct) {
+  if (!USE_REQUESTED_PANEL_FORMULA) {
+    const base = afterTier.value[key];
+    const afterAlways = (base + alwaysAbs[key]) * (1 + alwaysPct[key]);
+    const withSkin = afterAlways + skinContribution.value.delta[key];
+    const withParts = withSkin + partsContribution.value.delta[key];
+    return panelInt((withParts + requirementAbs[key]) * (1 + requirementPct[key]));
+  }
+  const base = afterTier.value[key];
+  const afterAlways = (base + alwaysAbs[key]) * (1 + alwaysPct[key]);
+  const withParts = afterAlways + partsContribution.value.delta[key];
+  return panelInt((withParts + requirementAbs[key]) * (1 + requirementPct[key]));
+}
+
+const traitContribution = computed(() => {
+  const out = {
+    persistent: { absolute: zeroStats(), percent: zeroStats() },
+    always: { absolute: zeroStats(), percent: zeroStats() },
+    requirement: { absolute: zeroStats(), percent: zeroStats() },
+    asMultiply: { absolute: zeroStats(), percent: zeroStats() },
+    sssAdditive: { absolute: zeroStats(), percent: zeroStats() },
+    ignored: { absolute: zeroStats(), percent: zeroStats() },
+    conditional: { absolute: zeroStats(), percent: zeroStats(), notes: Object.fromEntries(ALL_KEYS.map((k) => [k, []])) },
+    requirementStateByPathid: {},
+    rows: [],
+  };
+
+  const applyPersistent = (row, bucket = "always") => {
+    out.persistent.absolute[row.key] += row.absolute;
+    out.persistent.percent[row.key] += row.percent;
+    if (bucket === "always") {
+      out.always.absolute[row.key] += row.absolute;
+      out.always.percent[row.key] += row.percent;
+    } else if (bucket === "requirement") {
+      out.requirement.absolute[row.key] += row.absolute;
+      out.requirement.percent[row.key] += row.percent;
+    }
+
+    const zone = resolveTraitFormulaZone(row);
+    if (zone === "as_multiply") {
+      out.asMultiply.absolute[row.key] += row.absolute;
+      out.asMultiply.percent[row.key] += row.percent;
+    } else if (zone === "sss_additive") {
+      out.sssAdditive.absolute[row.key] += row.absolute;
+      out.sssAdditive.percent[row.key] += row.percent;
+    } else {
+      out.ignored.absolute[row.key] += row.absolute;
+      out.ignored.percent[row.key] += row.percent;
+    }
+    return zone;
+  };
+
+  const pushConditional = (row, note, conditionKind = "other") => {
+    out.conditional.absolute[row.key] += row.absolute;
+    out.conditional.percent[row.key] += row.percent;
+    const text = String(note || row.conditionDesc || row.trigger || "").trim();
+    if (text && !out.conditional.notes[row.key].includes(text)) out.conditional.notes[row.key].push(text);
+    out.rows.push({
+      ...row,
+      formulaZone: "conditional",
+      appliedInFormula: false,
+      conditionKind,
+      requirementSatisfied: false,
+    });
+  };
+
+  const requirementRows = [];
+
+  for (const row of traitEffects.value) {
+    if (!row.hasCondition) {
+      const zone = applyPersistent(row, "always");
+      out.rows.push({
+        ...row,
+        formulaZone: zone,
+        appliedInFormula: true,
+        conditionKind: "none",
+        requirementSatisfied: true,
+      });
+      continue;
+    }
+
+    const conditionText = String(row.conditionDesc || row.trigger || "").trim();
+    const req = parseRequirementFromConditionText(conditionText);
+    if (req) {
+      requirementRows.push({ row, req, conditionText });
+      continue;
+    }
+    if (isRuntimeOnlyConditionText(conditionText)) {
+      pushConditional(row, `${conditionText}（局内生效，不计入面板）`, "runtime");
+      continue;
+    }
+    pushConditional(row, conditionText || "条件未识别，按局内生效处理", "other");
+  }
+
+  const pending = requirementRows.slice();
+  let progressed = true;
+  while (pending.length && progressed) {
+    progressed = false;
+    for (let i = pending.length - 1; i >= 0; i -= 1) {
+      const item = pending[i];
+      const currentVal = panelReferenceValueForRequirement(
+        item.req.key,
+        out.always.absolute,
+        out.always.percent,
+        out.requirement.absolute,
+        out.requirement.percent,
+      );
+      if (currentVal < item.req.threshold) continue;
+
+      const zone = applyPersistent(item.row, "requirement");
+      out.rows.push({
+        ...item.row,
+        formulaZone: zone,
+        appliedInFormula: true,
+        conditionKind: "requirement",
+        requirementSatisfied: true,
+        requirementKey: item.req.key,
+        requirementThreshold: item.req.threshold,
+      });
+      out.requirementStateByPathid[item.row.pathid] = true;
+      pending.splice(i, 1);
+      progressed = true;
+    }
+  }
+
+  for (const item of pending) {
+    const currentVal = panelReferenceValueForRequirement(
+      item.req.key,
+      out.always.absolute,
+      out.always.percent,
+      out.requirement.absolute,
+      out.requirement.percent,
+    );
+    const note = t("roster.detail.requirementCurrent", {
+      condition: item.conditionText,
+      label: metaLabel(item.req.key) || item.req.alias || item.req.key,
+      value: currentVal,
+    });
+    pushConditional(item.row, note, "requirement");
+    out.requirementStateByPathid[item.row.pathid] = false;
+  }
+
+  return out;
+});
+
+const finalPersistent = computed(() => {
+  const out = zeroStats();
+  if (!USE_REQUESTED_PANEL_FORMULA) {
+    for (const k of ALL_KEYS) {
+      const base = afterTier.value[k];
+      const alwaysAbs = traitContribution.value.always.absolute[k];
+      const alwaysPct = traitContribution.value.always.percent[k];
+      const reqAbs = traitContribution.value.requirement.absolute[k];
+      const reqPct = traitContribution.value.requirement.percent[k];
+      const afterAlways = (base + alwaysAbs) * (1 + alwaysPct);
+      const withSkin = afterAlways + skinContribution.value.delta[k];
+      const withParts = withSkin + partsContribution.value.delta[k];
+      out[k] = (withParts + reqAbs) * (1 + reqPct);
+    }
+    return out;
+  }
+
+  for (const k of ALL_KEYS) {
+    const base = afterTier.value[k];
+    const asAbs = traitContribution.value.asMultiply.absolute[k];
+    const asPct = traitContribution.value.asMultiply.percent[k];
+    const additiveAbs = skinContribution.value.absolute[k] + traitContribution.value.sssAdditive.absolute[k];
+    const additivePct = skinContribution.value.percent[k] + traitContribution.value.sssAdditive.percent[k];
+    const additiveDelta = additiveAbs + base * additivePct;
+    out[k] = base * (1 + asPct) + asAbs + additiveDelta + partsContribution.value.delta[k];
+  }
+  return out;
+});
+
+const finalPotential = computed(() => {
+  const out = zeroStats();
+  for (const k of ALL_KEYS) {
+    const base = finalPersistent.value[k];
+    const abs = traitContribution.value.conditional.absolute[k];
+    const pct = traitContribution.value.conditional.percent[k];
+    out[k] = (base + abs) * (1 + pct);
+  }
+  return out;
+});
+
+function diffVsBase(key, val) {
+  const base = baseRaw.value[key] || 0;
+  const delta = val - base;
+  const pct = base ? delta / base : 0;
+  return {
+    absolute: delta,
+    percent: pct,
+    text: `${fmtSigned(delta)} (${fmtSignedPct(pct)})`,
+  };
+}
+
+function sourceLabel(item) {
+  if (item.sourceType === "tier") return t("roster.detail.sourceLabels.tier");
+  if (item.sourceType === "skin") return t("roster.detail.sourceLabels.skin");
+  if (item.sourceType === "trait_as") return t("roster.detail.sourceLabels.traitAs");
+  if (item.sourceType === "trait_sss") return t("roster.detail.sourceLabels.traitSss");
+  if (item.sourceType === "trait") return item.conditional ? t("roster.detail.sourceLabels.traitConditional") : t("roster.detail.sourceLabels.traitPersistent");
+  return item.sourceType || t("roster.detail.sourceLabels.default");
+}
+
+const affixRows = computed(() => {
+  const rows = [];
+
+  for (const k of MAIN_KEYS) {
+    const abs = tierGrowth.value[k];
+    if (Math.abs(abs) > 1e-9) {
+      rows.push({
+        key: k,
+        label: metaLabel(k),
+        absolute: abs,
+        percent: 0,
+        conditional: false,
+        source: tier.value,
+        sourceType: "tier",
+      });
+    }
+  }
+
+  for (const k of ALL_KEYS) {
+    const abs = skinContribution.value.absolute[k];
+    const pct = skinContribution.value.percent[k];
+    if (Math.abs(abs) > 1e-9 || Math.abs(pct) > 1e-9) {
+      rows.push({
+        key: k,
+        label: metaLabel(k),
+        absolute: abs,
+        percent: pct,
+        conditional: false,
+        source: skinContribution.value.sourceDesc,
+        sourceType: "skin",
+      });
+    }
+  }
+
+  for (const tr of traitContribution.value.rows) {
+    if (!tr.appliedInFormula) continue;
+    const traitSourceType = tr.hasCondition ? "trait" : tr.formulaZone === "as_multiply" ? "trait_as" : tr.formulaZone === "sss_additive" ? "trait_sss" : "trait";
+    rows.push({
+      key: tr.key,
+      label: metaLabel(tr.key) || tr.label,
+      absolute: tr.absolute,
+      percent: tr.percent,
+      conditional: tr.hasCondition,
+      source: tr.hasCondition ? `${tr.source} / ${tr.conditionDesc || tr.trigger}` : tr.source,
+      description: tr.descriptionZh || tr.conditionDesc || tr.trigger,
+      sourceType: traitSourceType,
+    });
+  }
+
+  const decorate = (row) => ({ ...row, sourceText: sourceLabel(row) });
+  return {
+    main: rows.filter((r) => MAIN_KEYS.includes(r.key)).map(decorate),
+    sub: rows.filter((r) => SUB_KEYS.includes(r.key)).map(decorate),
+  };
+});
+
+const traitPanelStateByPathid = computed(() => {
+  const map = {};
+  for (const row of traitContribution.value.rows) {
+    const pid = normalizeTraitPathid(row.pathid);
+    if (!pid) continue;
+    const prev = map[pid] || { runtime: false, requirement: false, requirementSatisfied: null };
+    if (row.conditionKind === "runtime") prev.runtime = true;
+    if (row.conditionKind === "requirement") {
+      prev.requirement = true;
+      if (prev.requirementSatisfied === null) prev.requirementSatisfied = Boolean(row.requirementSatisfied);
+      else prev.requirementSatisfied = prev.requirementSatisfied && Boolean(row.requirementSatisfied);
+    }
+    map[pid] = prev;
+  }
+  return map;
+});
+
+const traitViewRows = computed(() => {
+  const list = SHOW_HIDDEN_BONUS_TRAITS
+    ? unlockedTraits.value
+    : unlockedTraits.value.filter((trait) => String(trait.source || "") !== "HiddenUpgrades");
+  return list.map((trait) => {
+    const effects = Array.isArray(trait.effects) ? trait.effects : [];
+    const keys = effects.map((e) => String(e.key || "")).filter((k) => ALL_KEYS.includes(k));
+    const groups = new Set();
+    for (const key of keys) groups.add(MAIN_KEYS.includes(key) ? "main" : "sub");
+    const hasCondition =
+      Boolean(trait.hasCondition || trait.has_condition) || effects.some((e) => Boolean(e.hasCondition || e.has_condition));
+    const unlockTier = String(trait.unlockTier || trait.unlock_tier || "-").toUpperCase();
+    const sourceRaw = String(trait.source || "");
+    const sourceText = traitSourceLabel(sourceRaw);
+    const panelState = traitPanelStateByPathid.value[normalizeTraitPathid(trait.pathid)] || null;
+    const panelTag = panelState?.runtime
+      ? "局内生效，不计入面板"
+      : panelState?.requirement
+        ? panelState.requirementSatisfied
+          ? "需求达标，已计入面板"
+          : "需求未达标，不计入面板"
+        : "";
+    return {
+      ...trait,
+      displayName: traitDisplayName(trait),
+      hasCondition,
+      source: sourceRaw,
+      sourceText,
+      unlockTierText: tierLabel(unlockTier),
+      triggerText: deriveTriggerText(trait),
+      descriptionZh: deriveDescriptionText(trait),
+      effectsZh: String(trait.effectsZh || trait.effects_zh || ""),
+      hiddenValues: String(trait.hiddenValues || trait.hidden_values || ""),
+      impactText: keys.length ? keys.map((k) => metaLabel(k) || k).join(" / ") : t("roster.detail.noStatImpact"),
+      groupText: groups.size ? Array.from(groups).map(conditionGroupLabel).join("+") : t("roster.detail.triggerOnly"),
+      panelTag,
+    };
+  });
+});
+
+const breakdownGroups = computed(() => {
+  const groups = [];
+
+  const baseRows = ALL_KEYS.map((k) => ({
+    key: k,
+    label: metaLabel(k),
+    absolute: baseRaw.value[k],
+    percent: 0,
+    computed: baseRaw.value[k],
+    source: "base",
+    note: "baseMax/baseMaxMetaFull",
+  }));
+
+  groups.push({
+    key: "base",
+    title: breakdownGroupTitle("base"),
+    summary: sumRows(baseRows),
+    rows: baseRows,
+  });
+
+  const tierRows = MAIN_KEYS.filter((k) => Math.abs(tierGrowth.value[k]) > 1e-9).map((k) => ({
+    key: k,
+    label: metaLabel(k),
+    absolute: tierGrowth.value[k],
+    percent: 0,
+    computed: tierGrowth.value[k],
+    source: "tier",
+    note: `${tier.value} 档位累计成长`,
+  }));
+  groups.push({
+    key: "tier",
+    title: breakdownGroupTitle("tier"),
+    summary: sumRows(tierRows),
+    rows: tierRows,
+  });
+
+  const skinRows = ALL_KEYS.filter((k) => Math.abs(skinContribution.value.delta[k]) > 1e-9).map((k) => ({
+    key: k,
+    label: metaLabel(k),
+    absolute: skinContribution.value.absolute[k],
+    percent: skinContribution.value.percent[k],
+    computed: skinContribution.value.delta[k],
+    source: "skin",
+    note: skinContribution.value.sourceDesc,
+  }));
+  groups.push({
+    key: "skin",
+    title: breakdownGroupTitle("skin"),
+    summary: {
+      absolute: skinRows.reduce((s, r) => s + n(r.computed), 0),
+      percent: skinRows.reduce((s, r) => s + n(r.percent), 0),
+    },
+    rows: skinRows,
+  });
+
+  const partRows = ALL_KEYS.filter((k) => Math.abs(partsContribution.value.delta[k]) > 1e-9).map((k) => {
+    const sources = [];
+    for (const eq of Object.values(equippedParts.value)) {
+      if (!eq) continue;
+      const partName = String(eq.part?.displayNameZh || eq.part?.name || t("roster.detail.partFallbackName"));
+      if (Array.isArray(eq.part?.effects) && eq.part.effects.some((e) => String(e?.key || "") === k)) sources.push(partName);
+      const btRows = Array.isArray(eq.part?.breakthroughOptions)
+        ? (Array.isArray(eq.customBreakthroughPathids) ? eq.customBreakthroughPathids : [])
+            .map((v) => Number(v))
+            .filter((v) => Number.isFinite(v) && v > 0)
+            .map((pid) => eq.part.breakthroughOptions.find((o) => Number(o.pathid) === pid))
+            .filter(Boolean)
+        : [];
+      for (const bt of btRows) {
+        if (String(bt.key || "") === k) sources.push(`${partName}(${t("roster.detail.breakthroughShort")}:${bt.labelZh || metaLabel(k) || k})`);
+      }
+    }
+    return {
+      key: k,
+      label: metaLabel(k),
+      absolute: partsContribution.value.absolute[k],
+      percent: partsContribution.value.percent[k],
+      computed: partsContribution.value.delta[k],
+      source: "parts",
+      note: sources.join(", ") || t("roster.detail.partsEquipped"),
+    };
+  });
+  groups.push({
+    key: "parts",
+    title: breakdownGroupTitle("parts"),
+    summary: sumRows(partRows),
+    rows: partRows,
+  });
+
+  const persistentRows = traitContribution.value.rows
+    .filter((r) => Boolean(r.appliedInFormula))
+    .map((r) => ({
+      key: r.key,
+      label: metaLabel(r.key) || r.label,
+      absolute: r.absolute,
+      percent: r.percent,
+      computed: afterTier.value[r.key] * r.percent + r.absolute,
+      source: "trait_persistent",
+      note: `${r.source} (${tierLabel(r.unlockTier || "-")})${r.conditionKind === "requirement" ? ` / ${t("roster.detail.requirementMetShort")}` : ""}${USE_REQUESTED_PANEL_FORMULA ? (r.formulaZone === "as_multiply" ? ` / ${t("roster.detail.sourceLabels.traitAs")}` : ` / ${t("roster.detail.sourceLabels.traitSss")}`) : ""}`,
+      description: r.descriptionZh || r.trigger,
+    }));
+  groups.push({
+    key: "trait_persistent",
+    title: breakdownGroupTitle("trait_persistent"),
+    summary: sumRows(persistentRows),
+    rows: persistentRows,
+  });
+
+  const conditionRows = traitContribution.value.rows
+    .filter((r) => r.hasCondition && !r.appliedInFormula)
+    .map((r) => ({
+      key: r.key,
+      label: metaLabel(r.key) || r.label,
+      absolute: r.absolute,
+      percent: r.percent,
+      computed: finalPersistent.value[r.key] * r.percent + r.absolute,
+      source: "trait_conditional",
+      note: `${r.source} / ${r.conditionDesc || r.trigger}`,
+      trigger: r.conditionDesc || r.trigger,
+      description: r.descriptionZh || r.conditionDesc || r.trigger,
+    }));
+  groups.push({
+    key: "trait_conditional",
+    title: breakdownGroupTitle("trait_conditional"),
+    summary: sumRows(conditionRows),
+    rows: conditionRows,
+  });
+
+  return groups;
+});
+
+const finalStatRows = computed(() =>
+  ALL_KEYS.map((k) => ({
+    key: k,
+    label: metaLabel(k),
+    final: finalPersistent.value[k],
+    potential: finalPotential.value[k],
+    diffBase: diffVsBase(k, finalPersistent.value[k]),
+    triggerNotes: traitContribution.value.conditional.notes[k],
+  })),
+);
+
+const FINAL_MAIN_ORDER = ["MetaEarlyAcc", "MetaMidAcc", "MetaMaxSpeed", "MetaHandling"];
+const FINAL_BAR_MAX = 550;
+
+const mainFinalRows = computed(() => {
+  const idx = new Map(FINAL_MAIN_ORDER.map((k, i) => [k, i]));
+  return [...finalStatRows.value]
+    .filter((r) => FINAL_MAIN_ORDER.includes(r.key))
+    .sort((a, b) => (idx.get(a.key) ?? 999) - (idx.get(b.key) ?? 999));
+});
+
+const subFinalRows = computed(() =>
+  [...finalStatRows.value]
+    .filter((r) => !FINAL_MAIN_ORDER.includes(r.key))
+    .sort((a, b) => String(a.label || "").localeCompare(String(b.label || ""), "zh-CN")),
+);
+
+function maxTierOption() {
+  if (!availableTierOptions.value.length) return "S";
+  const optionSet = new Set(availableTierOptions.value.map((t) => String(t || "").toUpperCase()));
+  for (let i = TIER_ORDER.length - 1; i >= 0; i -= 1) {
+    const tierName = TIER_ORDER[i];
+    if (optionSet.has(tierName)) return tierName;
+  }
+  return String(availableTierOptions.value[availableTierOptions.value.length - 1] || "S").toUpperCase();
+}
+
+function normalizeTierName(rawTier) {
+  const t = String(rawTier || "").trim().toUpperCase();
+  if (!t) return "";
+  if (TIER_ORDER.includes(t)) return t;
+  if (t.includes("SSS")) return "SSS";
+  if (t.includes("SS")) return "SS";
+  if (t.includes("S")) return "S";
+  if (t.includes("A")) return "A";
+  if (t.includes("B")) return "B";
+  if (t.includes("C")) return "C";
+  return "";
+}
+
+function collectTraitPathidsForTier(targetTier) {
+  const idx = Math.max(0, TIER_ORDER.indexOf(normalizeTierName(targetTier || "S") || "S"));
+  const allow = new Set(TIER_ORDER.slice(0, idx + 1));
+  return allTraits.value
+    .filter((t) => {
+      const src = String(t.source || "");
+      if (src !== "Upgrades") return true;
+      return allow.has(normalizeTierName(t.unlockTier || t.unlock_tier));
+    })
+    .map((t) => normalizeTraitPathid(t.pathid))
+    .filter(Boolean);
+}
+
+function defaultTraitPathidsForTier(targetTier) {
+  return Array.from(new Set(collectTraitPathidsForTier(targetTier)));
+}
+
+function applyMaxPerformancePreset() {
+  if (isVisitorReadOnly.value) return;
+  const targetTier = maxTierOption();
+  tier.value = targetTier;
+  level.value = 30;
+  includeSkinBonus.value = false;
+  selectedTraitPathids.value = defaultTraitPathidsForTier(targetTier);
+}
+
+function setTier(nextTier) {
+  if (isVisitorReadOnly.value) return;
+  const next = String(nextTier || "").toUpperCase();
+  if (!next || !availableTierOptions.value.includes(next)) return;
+  tier.value = next;
+}
+
+function pickSkin(nextSkinId) {
+  if (isVisitorReadOnly.value) return;
+  selectedSkinId.value = String(nextSkinId || "");
+}
+
+const totalPower = computed(() => finalStatRows.value.reduce((s, r) => s + panelInt(r.final), 0));
+
+function barWidth(v) {
+  const p = Math.min(100, Math.max(0, (Number(v || 0) / FINAL_BAR_MAX) * 100));
+  return `${p.toFixed(2)}%`;
+}
+
+const hasMainAffix = computed(() => affixRows.value.main.length > 0);
+const hasSubAffix = computed(() => affixRows.value.sub.length > 0);
+
+function fmtAffixAbs(v) {
+  const num = Number(v || 0);
+  if (!num) return "0";
+  return `${num >= 0 ? "+" : ""}${Number(num.toFixed(2))}`;
+}
+
+function fmtAffixPct(v) {
+  const num = Number(v || 0);
+  if (!num) return "0%";
+  const p = Number((num * 100).toFixed(2));
+  return `${p >= 0 ? "+" : ""}${p}%`;
+}
+
+function effectTextFromTrait(trait) {
+  const effects = Array.isArray(trait.effects) ? trait.effects : [];
+  return effects
+    .map((e) => {
+      const key = String(e.key || "");
+      const label = String(e.type_zh || metaLabel(key) || "").trim();
+      if (!label) return "";
+      const abs = n(e.absolute);
+      const pct = n(e.percent);
+      if (Math.abs(pct) > 1e-9) return `${label}${fmtSignedPct(pct)}`;
+      return `${label}${fmtSigned(abs)}`;
+    })
+    .filter(Boolean)
+    .join("；");
+}
+
+function allMainSamePercentSummary(trait) {
+  const effects = Array.isArray(trait.effects) ? trait.effects : [];
+  const mainRows = effects.filter((e) => MAIN_KEYS.includes(String(e?.key || "")));
+  if (mainRows.length < 4) return "";
+  const byKey = new Map(mainRows.map((e) => [String(e.key), e]));
+  if (!MAIN_KEYS.every((k) => byKey.has(k))) return "";
+  const rows = MAIN_KEYS.map((k) => byKey.get(k));
+  if (!rows.every((e) => Math.abs(n(e.absolute)) < 1e-9)) return "";
+  const p0 = n(rows[0].percent);
+  if (Math.abs(p0) < 1e-9) return "";
+  if (!rows.every((e) => Math.abs(n(e.percent) - p0) < 1e-9)) return "";
+  return `主要属性${fmtSignedPct(p0)}`;
+}
+
+function displayTraitDesc(trait) {
+  const explicitDesc = String(
+    locale.value === "en_us"
+      ? (trait?.descriptionEn || trait?.description_en || "")
+      : (trait?.descriptionZh || trait?.description_zh || ""),
+  ).trim();
+  if (explicitDesc && !/Limit\s*=|Param1\s*=|常驻\/条件见说明|Always active \/ see condition note/.test(explicitDesc)) return explicitDesc;
+
+  const trigger = String(
+    locale.value === "en_us"
+      ? (trait?.triggerEn || trait?.trigger_en || trait?.triggerText || trait?.trigger || "")
+      : (trait?.triggerText || trait?.trigger || ""),
+  ).trim();
+  const effectsText = String(
+    locale.value === "en_us"
+      ? (trait?.effectsEn || trait?.effects_en || "")
+      : (trait?.effectsZh || trait?.effects_zh || ""),
+  ).trim();
+  if (trigger && effectsText) return `${trigger}${locale.value === "en_us" ? ", " : "，"}${effectsText.split(";")[0]?.trim() || effectsText}`;
+  if (effectsText) return effectsText;
+  if (trigger) return trigger;
+
+  const allMainSummary = allMainSamePercentSummary(trait);
+  const fromHidden = conditionTextFromLimit(
+    parseHiddenValues(trait.hiddenValues || trait.hidden_values)?.limit,
+    parseHiddenValues(trait.hiddenValues || trait.hidden_values)?.param1,
+  );
+  if (fromHidden) {
+    const effect = allMainSummary || effectTextFromTrait(trait);
+    return effect ? `${fromHidden}，${effect}` : fromHidden;
+  }
+  if (allMainSummary) {
+    const zhTrigger = String(trait.triggerText || trait.trigger || "").trim();
+    if (zhTrigger && !/Limit\s*=|Param1\s*=|常驻\/条件见说明/.test(zhTrigger)) {
+      return `${zhTrigger}，${allMainSummary}`;
+    }
+    return allMainSummary;
+  }
+  const desc = String(trait.descriptionZh || trait.description_zh || "").trim();
+  if (desc && !/Limit\s*=|Param1\s*=|常驻\/条件见说明/.test(desc)) return desc;
+  const zhTrigger = String(trait.triggerText || trait.trigger || "").trim();
+  if (zhTrigger && !/Limit\s*=|Param1\s*=|常驻\/条件见说明/.test(zhTrigger)) return zhTrigger;
+  return effectTextFromTrait(trait) || t("roster.detail.noDescription");
+}
+
+function onToggleTrait(pathid) {
+  if (isVisitorReadOnly.value) return;
+  const pid = normalizeTraitPathid(pathid);
+  if (!pid) return;
+  const target = unlockedTraits.value.find((t) => normalizeTraitPathid(t.pathid) === pid);
+  if (!target) return;
+  const isHidden = String(target.source || "") === "HiddenUpgrades";
+  if (isHidden) return;
+
+  const idx = selectedTraitPathids.value.findIndex((v) => normalizeTraitPathid(v) === pid);
+  if (idx >= 0) {
+    selectedTraitPathids.value = selectedTraitPathids.value.filter((v) => normalizeTraitPathid(v) !== pid);
+    return;
+  }
+
+  // Traits are multi-select by design.
+  selectedTraitPathids.value = [...selectedTraitPathids.value, pid];
+}
+
+function partEffectsByKeys(part, keys) {
+  const effects = Array.isArray(part?.effects) ? part.effects : [];
+  return effects.filter((e) => keys.includes(String(e?.key || "")));
+}
+function isCustomizableSPart(part) {
+  if (String(part?.grade || "") !== "S") return false;
+  return Array.isArray(part?.breakthroughOptions) && part.breakthroughOptions.length > 0;
+}
+function breakthroughOptionsForPart(part) {
+  if (!isCustomizableSPart(part)) return [];
+  const ownRows = normalizeOptionRows(part?.breakthroughOptions);
+  const typeKey = String(part?.type || "");
+  const allowedKeys = TYPE_BREAKTHROUGH_ALLOWED_KEYS[typeKey];
+  const filtered = allowedKeys instanceof Set ? ownRows.filter((r) => allowedKeys.has(String(r?.key || ""))) : ownRows;
+  return dedupeBreakthroughOptions(filtered);
+}
+function findBreakthroughOption(part, pathid) {
+  const pid = Number(pathid);
+  if (!Number.isFinite(pid) || pid <= 0) return null;
+  return breakthroughOptionsForPart(part).find((o) => Number(o.pathid) === pid) || null;
+}
+function normalizeBreakthroughLevel(v) {
+  const nlv = Math.floor(Number(v) || 1);
+  return Math.max(1, Math.min(4, nlv));
+}
+function breakthroughMultiplier(level) {
+  return normalizeBreakthroughLevel(level) / 4;
+}
+function scaledBreakthroughOption(opt, level) {
+  const mul = breakthroughMultiplier(level);
+  return {
+    ...opt,
+    absolute: n(opt?.absolute) * mul,
+    percent: n(opt?.percent) * mul,
+    baseAbsolute: n(opt?.absolute),
+    basePercent: n(opt?.percent),
+    breakthroughLevel: normalizeBreakthroughLevel(level),
+  };
+}
+function isReadonlyImportedBreakthroughRow(row) {
+  return Boolean(row?.isImportedOnly || row?.isDuplicateSelection);
+}
+function normalizeImportedBreakthroughRow(rawRow, eqData) {
+  const src = rawRow && typeof rawRow === "object" ? rawRow : {};
+  const pid = Number(src?.pathid);
+  if (!Number.isFinite(pid) || pid <= 0) return null;
+  const fallbackOpt = findBreakthroughOption(eqData?.part, pid);
+  const base = fallbackOpt && !src?.key ? { ...fallbackOpt, ...src } : src;
+  const key = String(base?.key || "").trim();
+  if (!ALL_KEYS.includes(key)) return null;
+  const level = normalizeBreakthroughLevel(src?.level ?? src?.breakthroughLevel ?? 1);
+  return {
+    ...scaledBreakthroughOption(base, level),
+    modifierName: String(base?.modifierName || base?.name || "").trim(),
+    isNative: Boolean(base?.isNative),
+    isImportedOnly: Boolean(base?.isImportedOnly),
+    isDuplicateSelection: Boolean(base?.isDuplicateSelection),
+    sourcePartId: String(base?.sourcePartId || "").trim(),
+    sourcePartType: String(base?.sourcePartType || "").trim(),
+  };
+}
+function selectedBreakthroughRows(eqData) {
+  if (!eqData || !isCustomizableSPart(eqData?.part)) return [];
+  const importedRows = Array.isArray(eqData?.importedBreakthroughRows) ? eqData.importedBreakthroughRows : [];
+  if (importedRows.length) {
+    return importedRows
+      .map((row) => normalizeImportedBreakthroughRow(row, eqData))
+      .filter(Boolean);
+  }
+  const idsRaw = Array.isArray(eqData?.customBreakthroughPathids) ? eqData.customBreakthroughPathids : [];
+  const levelsRaw = Array.isArray(eqData?.breakthroughLevels)
+    ? eqData.breakthroughLevels
+    : [eqData?.breakthroughLevel, eqData?.breakthroughLevel];
+  const out = [];
+  for (let i = 0; i < idsRaw.length; i += 1) {
+    const pid = Number(idsRaw[i]);
+    if (!Number.isFinite(pid) || pid <= 0) continue;
+    const opt = findBreakthroughOption(eqData.part, pid);
+    if (!opt) continue;
+    const lv = normalizeBreakthroughLevel(levelsRaw[i] ?? eqData?.breakthroughLevel ?? 1);
+    out.push(scaledBreakthroughOption(opt, lv));
+  }
+  return out;
+}
+function breakthroughOptionLabel(opt, level = 1) {
+  if (!opt) return "";
+  const key = String(opt.key || "");
+  const label = metaLabel(key) || opt.labelZh || key;
+  return `${label} ${fmtPartEffect(scaledBreakthroughOption(opt, level))}`;
+}
+function breakthroughValueLabel(pathid, slot = "slot1") {
+  if (!String(pathid || "")) return t("roster.detail.partModal.none");
+  const opt = findBreakthroughOption(modalSelectedPart.value, pathid);
+  const lv = slot === "slot2" ? modalBreakthroughLevel2.value : modalBreakthroughLevel1.value;
+  return opt ? breakthroughOptionLabel(opt, lv) : t("roster.detail.partModal.none");
+}
+function breakthroughOptionsForSlot(slot) {
+  const opts = Array.isArray(availableBreakthroughOptions.value) ? availableBreakthroughOptions.value : [];
+  const other = slot === "slot1" ? String(modalBreakthrough2.value || "") : String(modalBreakthrough1.value || "");
+  return opts.filter((opt) => String(opt?.pathid || "") !== other);
+}
+function updateBreakthroughMenuPlacement(slot, triggerEl) {
+  const key = String(slot || "");
+  if (!key || !triggerEl) return;
+  const rect = triggerEl.getBoundingClientRect();
+  const optionCount = (Array.isArray(availableBreakthroughOptions.value) ? availableBreakthroughOptions.value.length : 0) + 1;
+  const menuEstimate = Math.min(280, optionCount * 44 + 8);
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+  breakthroughMenuPlacement.value[key] = spaceBelow >= menuEstimate || spaceBelow >= spaceAbove ? "down" : "up";
+}
+function toggleBreakthroughMenu(slot, evt) {
+  const next = String(slot || "");
+  if (activeBreakthroughMenu.value === next) {
+    activeBreakthroughMenu.value = "";
+    return;
+  }
+  updateBreakthroughMenuPlacement(next, evt?.currentTarget);
+  activeBreakthroughMenu.value = next;
+}
+function chooseBreakthrough(slot, pathid) {
+  if (isVisitorReadOnly.value) return;
+  const v = String(pathid || "");
+  if (slot === "slot1") {
+    modalBreakthrough1.value = v;
+    if (v && String(modalBreakthrough2.value || "") === v) modalBreakthrough2.value = "";
+  }
+  if (slot === "slot2") {
+    modalBreakthrough2.value = v;
+    if (v && String(modalBreakthrough1.value || "") === v) modalBreakthrough1.value = "";
+  }
+  activeBreakthroughMenu.value = "";
+}
+function closeBreakthroughMenus() {
+  activeBreakthroughMenu.value = "";
+}
+
+const availablePartsForModal = computed(() => {
+  if (!modalPartType.value) return [];
+  const typeData = PARTS_BY_TYPE[modalPartType.value];
+  if (!typeData || typeof typeData !== "object") return [];
+  const gradeDesc = { S: 0, A: 1, B: 2, C: 3 };
+  const sortRows = (rows) =>
+    [...rows].sort((a, b) => {
+      const g = (gradeDesc[String(a?.grade || "")] ?? 99) - (gradeDesc[String(b?.grade || "")] ?? 99);
+      if (g) return g;
+      const v = String(a?.variant || "").localeCompare(String(b?.variant || ""));
+      if (v) return v;
+      return String(a?.id || "").localeCompare(String(b?.id || ""));
+    });
+  if (modalGrade.value === "ALL") {
+    const allRows = Array.isArray(typeData?.all) ? typeData.all : [];
+    return sortRows(allRows);
+  }
+  const rows = Array.isArray(typeData?.byGrade?.[modalGrade.value]) ? typeData.byGrade[modalGrade.value] : [];
+  return sortRows(rows);
+});
+const availableBreakthroughOptions = computed(() => breakthroughOptionsForPart(modalSelectedPart.value));
+const modalEquippedPartRecord = computed(() => (modalPartType.value ? equippedParts.value?.[modalPartType.value] || null : null));
+const modalSelectedBreakthroughRows = computed(() => {
+  const part = modalSelectedPart.value;
+  const out = [];
+  const o1 = findBreakthroughOption(part, modalBreakthrough1.value);
+  const o2 = findBreakthroughOption(part, modalBreakthrough2.value);
+  if (o1) out.push(scaledBreakthroughOption(o1, modalBreakthroughLevel1.value));
+  if (o2) out.push(scaledBreakthroughOption(o2, modalBreakthroughLevel2.value));
+  return out;
+});
+const modalReadonlyBreakthroughRows = computed(() => {
+  const eq = modalEquippedPartRecord.value;
+  const selectedId = String(modalSelectedPart.value?.id || "");
+  const equippedId = String(eq?.part?.id || "");
+  if (!eq || !selectedId || selectedId !== equippedId) return [];
+  return selectedBreakthroughRows(eq).filter((row) => isReadonlyImportedBreakthroughRow(row));
+});
+watch([modalPartType, modalGrade], () => {
+  if (!modalPartType.value) return;
+  const list = availablePartsForModal.value;
+  if (!list.length) {
+    modalSelectedPart.value = null;
+    return;
+  }
+  const currentId = String(modalSelectedPart.value?.id || "");
+  if (!list.some((p) => String(p.id) === currentId)) modalSelectedPart.value = list[0];
+});
+watch([modalSelectedPart, availableBreakthroughOptions], ([part, opts]) => {
+  if (!part && isMobileDetail.value) {
+    showMobilePartList.value = true;
+  }
+  if (!isCustomizableSPart(part)) {
+    modalBreakthrough1.value = "";
+    modalBreakthrough2.value = "";
+    modalBreakthroughLevel1.value = 1;
+    modalBreakthroughLevel2.value = 1;
+    return;
+  }
+  const valid = new Set((Array.isArray(opts) ? opts : []).map((o) => String(o.pathid)));
+  if (!valid.has(String(modalBreakthrough1.value || ""))) modalBreakthrough1.value = "";
+  if (!valid.has(String(modalBreakthrough2.value || ""))) modalBreakthrough2.value = "";
+  if (String(modalBreakthrough1.value || "") && String(modalBreakthrough1.value || "") === String(modalBreakthrough2.value || "")) {
+    modalBreakthrough2.value = "";
+  }
+  modalBreakthroughLevel1.value = normalizeBreakthroughLevel(modalBreakthroughLevel1.value);
+  modalBreakthroughLevel2.value = normalizeBreakthroughLevel(modalBreakthroughLevel2.value);
+});
+function openPartModal(type) {
+  if (isVisitorReadOnly.value) return;
+  modalPartType.value = type;
+  showMobilePartList.value = true;
+  modalGrade.value = "ALL";
+  activeBreakthroughMenu.value = "";
+  const eq = equippedParts.value[type];
+  if (eq) {
+    modalGrade.value = eq.part.grade;
+    modalSelectedPart.value = eq.part;
+    if (isCustomizableSPart(eq.part)) {
+      const saved = Array.isArray(eq.customBreakthroughPathids) ? eq.customBreakthroughPathids : [];
+      const savedLevels = Array.isArray(eq.breakthroughLevels)
+        ? eq.breakthroughLevels
+        : [eq.breakthroughLevel, eq.breakthroughLevel];
+      modalBreakthrough1.value = String(saved[0] || "");
+      modalBreakthrough2.value = String(saved[1] || "");
+      modalBreakthroughLevel1.value = normalizeBreakthroughLevel(savedLevels[0] ?? 1);
+      modalBreakthroughLevel2.value = normalizeBreakthroughLevel(savedLevels[1] ?? 1);
+    } else {
+      modalBreakthroughLevel1.value = 1;
+      modalBreakthroughLevel2.value = 1;
+    }
+  } else {
+    modalSelectedPart.value = null;
+    modalBreakthrough1.value = "";
+    modalBreakthrough2.value = "";
+    modalBreakthroughLevel1.value = 1;
+    modalBreakthroughLevel2.value = 1;
+  }
+}
+function selectPartInModal(part) {
+  if (isVisitorReadOnly.value) return;
+  modalSelectedPart.value = part;
+  activeBreakthroughMenu.value = "";
+  if (isMobileDetail.value) {
+    showMobilePartList.value = false;
+  }
+}
+function showPartListInModal() {
+  showMobilePartList.value = true;
+  activeBreakthroughMenu.value = "";
+}
+function closePartModal() {
+  modalPartType.value = null;
+  modalSelectedPart.value = null;
+  activeBreakthroughMenu.value = "";
+  showMobilePartList.value = true;
+}
+function equipPart() {
+  if (isVisitorReadOnly.value) return;
+  if (!modalPartType.value || !modalSelectedPart.value) return;
+  const useCustomSubs = isCustomizableSPart(modalSelectedPart.value);
+  equippedParts.value[modalPartType.value] = {
+    part: modalSelectedPart.value,
+    customBreakthroughPathids: useCustomSubs ? [modalBreakthrough1.value || null, modalBreakthrough2.value || null] : [],
+    breakthroughLevels: useCustomSubs
+      ? [normalizeBreakthroughLevel(modalBreakthroughLevel1.value), normalizeBreakthroughLevel(modalBreakthroughLevel2.value)]
+      : [1, 1],
+    breakthroughLevel: useCustomSubs ? normalizeBreakthroughLevel(modalBreakthroughLevel1.value) : 1,
+  };
+  closePartModal();
+}
+function unequipPart() {
+  if (isVisitorReadOnly.value) return;
+  if (!modalPartType.value) return;
+  equippedParts.value[modalPartType.value] = null;
+  closePartModal();
+}
+function slotStyle(eqData) {
+  if (!eqData) return {};
+  return partVisualStyle(eqData.part);
+}
+
+function buildCloudConfig() {
+  return {
+    tier: tier.value,
+    level: Number(level.value || 1),
+    includeSkinBonus: Boolean(includeSkinBonus.value),
+    selectedSkinId: String(selectedSkinId.value || ""),
+    selectedTraitPathids: Array.isArray(selectedTraitPathids.value) ? [...selectedTraitPathids.value] : [],
+    equippedParts: JSON.parse(JSON.stringify(equippedParts.value || {})),
+  };
+}
+
+function applyCloudConfig(config) {
+  if (!config || typeof config !== "object") return;
+  if (config.tier) tier.value = String(config.tier);
+  if (Number.isFinite(Number(config.level))) level.value = Number(config.level);
+  includeSkinBonus.value = Boolean(config.includeSkinBonus);
+  selectedSkinId.value = String(config.selectedSkinId || selectedSkinId.value || "");
+  selectedTraitPathids.value = Array.isArray(config.selectedTraitPathids)
+    ? config.selectedTraitPathids.map((v) => normalizeTraitPathid(v)).filter(Boolean)
+    : [];
+  if (config.equippedParts && typeof config.equippedParts === "object") {
+    equippedParts.value = normalizeArchiveEquippedParts(JSON.parse(JSON.stringify(config.equippedParts)));
+  }
+}
+
+async function loadCloudConfig() {
+  const token = String(props.cloudToken || "");
+  const carId = String(props.car?.id || "").toUpperCase();
+  if (!token || !carId) return;
+  cloudBusy.value = true;
+  try {
+    const json = await cloudApi.getCarConfig(token, carId);
+    if (json?.config) {
+      applyCloudConfig(json.config);
+      cloudMsg.value = t("roster.detail.cloudMessages.loadedConfig");
+    } else {
+      cloudMsg.value = t("roster.detail.cloudMessages.noConfig");
+    }
+  } catch (err) {
+    cloudMsg.value = t("roster.detail.cloudMessages.loadFailed", { message: err?.message || "Unknown error" });
+  } finally {
+    cloudBusy.value = false;
+  }
+}
+
+async function saveCloudConfig() {
+  const token = String(props.cloudToken || "");
+  const carId = String(props.car?.id || "").toUpperCase();
+  if (!token || !carId) {
+    cloudMsg.value = t("roster.detail.cloudMessages.loginRequired");
+    return;
+  }
+  cloudBusy.value = true;
+  try {
+    const payload = buildCloudConfig();
+    await cloudApi.saveCarConfig(token, carId, payload);
+    cloudMsg.value = t("roster.detail.cloudMessages.savedConfig");
+  } catch (err) {
+    cloudMsg.value = t("roster.detail.cloudMessages.saveFailed", { message: err?.message || "Unknown error" });
+  } finally {
+    cloudBusy.value = false;
+  }
+}
+
+async function loadCloudPresets() {
+  const token = String(props.cloudToken || "");
+  const carId = String(props.car?.id || "").toUpperCase();
+  if (!token) {
+    cloudPresets.value = [];
+    selectedCloudPresetId.value = "";
+    return;
+  }
+  try {
+    const json = await cloudApi.getPresets(token, carId);
+    cloudPresets.value = Array.isArray(json?.presets) ? json.presets : [];
+    if (!cloudPresets.value.some((p) => String(p.id) === String(selectedCloudPresetId.value))) {
+      selectedCloudPresetId.value = cloudPresets.value[0] ? String(cloudPresets.value[0].id) : "";
+    }
+  } catch {
+    cloudPresets.value = [];
+  }
+}
+
+async function saveAsCloudPreset() {
+  const token = String(props.cloudToken || "");
+  const carId = String(props.car?.id || "").toUpperCase();
+  if (!token) {
+    cloudMsg.value = t("roster.detail.cloudMessages.loginRequired");
+    return;
+  }
+  if (!carId) {
+    cloudMsg.value = t("roster.detail.cloudMessages.invalidCarId");
+    return;
+  }
+  if (cloudPresets.value.length >= MAX_PRESETS_PER_CAR) {
+    cloudMsg.value = t("roster.detail.cloudMessages.presetLimit", { max: MAX_PRESETS_PER_CAR });
+    return;
+  }
+  cloudBusy.value = true;
+  try {
+    const baseName = locale.value === "en_us"
+      ? (carNameEn.value || carPrimaryName.value || props.car?.id || "Car")
+      : (carNameZh.value || carPrimaryName.value || props.car?.id || "赛车");
+    const fallbackName = locale.value === "en_us"
+      ? t("roster.detail.cloudMessages.presetNameDefaultEn", { car: baseName })
+      : t("roster.detail.cloudMessages.presetNameDefaultZh", { car: baseName });
+    const name = String(cloudPresetName.value || "").trim() || fallbackName;
+    const data = buildCloudConfig();
+    await cloudApi.createPreset(token, { name, data, carId });
+    cloudPresetName.value = "";
+    await loadCloudPresets();
+    cloudMsg.value = t("roster.detail.cloudMessages.presetSaved");
+  } catch (err) {
+    cloudMsg.value = t("roster.detail.cloudMessages.presetSaveFailed", { message: err?.message || "Unknown error" });
+  } finally {
+    cloudBusy.value = false;
+  }
+}
+
+async function removeCloudPreset(presetId) {
+  const token = String(props.cloudToken || "");
+  const pid = String(presetId || "").trim();
+  if (!token || !pid) return;
+  if (!window.confirm(t("roster.detail.cloudMessages.confirmDeletePreset"))) return;
+  cloudBusy.value = true;
+  try {
+    await cloudApi.deletePreset(token, pid);
+    await loadCloudPresets();
+    cloudMsg.value = t("roster.detail.cloudMessages.presetDeleted");
+  } catch (err) {
+    cloudMsg.value = t("roster.detail.cloudMessages.presetDeleteFailed", { message: err?.message || "Unknown error" });
+  } finally {
+    cloudBusy.value = false;
+  }
+}
+
+function applySelectedPreset() {
+  const id = String(selectedCloudPresetId.value || "");
+  const row = cloudPresets.value.find((p) => String(p.id) === id);
+  if (!row?.data) {
+    cloudMsg.value = t("roster.detail.cloudMessages.selectPresetFirst");
+    return;
+  }
+  applyCloudConfig(row.data);
+  cloudMsg.value = t("roster.detail.cloudMessages.presetApplied", { name: row.name || row.id });
+}
+
+function applyPresetById(presetId) {
+  selectedCloudPresetId.value = String(presetId || "");
+  applySelectedPreset();
+}
+
+function applyBasePreviewConfig() {
+  const initialTier = String(props.car?.initialRank || "C").toUpperCase();
+  if (availableTierOptions.value.includes(initialTier)) tier.value = initialTier;
+  else tier.value = String(availableTierOptions.value[0] || initialTier || "C").toUpperCase();
+  level.value = 1;
+  includeSkinBonus.value = false;
+  equippedParts.value = { turbo: null, ecu: null, suspension: null, tires: null };
+  selectedTraitPathids.value = defaultTraitPathidsForTier(tier.value);
+  const defaultSkin = skins.value.find((row) => Boolean(row?.isDefault)) || skins.value[0] || null;
+  if (defaultSkin?.id) selectedSkinId.value = String(defaultSkin.id);
+}
+
+function parseGarageCarLevel(garage, carId) {
+  const normalizedId = String(carId || "").trim().toUpperCase();
+  if (!normalizedId) return 0;
+  const carsMap = garage && typeof garage === "object" ? garage : {};
+  const direct = carsMap?.[normalizedId] || carsMap?.[String(carId || "").trim()];
+  if (direct && typeof direct === "object") {
+    const lv = Number(direct.level);
+    if (Number.isFinite(lv) && lv > 0) return lv;
+  }
+  return 0;
+}
+
+function parseGarageCarUpgradeStage(garage, carId) {
+  const normalizedId = String(carId || "").trim().toUpperCase();
+  if (!normalizedId) return 0;
+  const carsMap = garage && typeof garage === "object" ? garage : {};
+  const direct = carsMap?.[normalizedId] || carsMap?.[String(carId || "").trim()];
+  if (direct && typeof direct === "object") {
+    const stage = Number(direct.upgradeStage);
+    if (Number.isFinite(stage) && stage >= 0) return Math.floor(stage);
+  }
+  return 0;
+}
+
+function traitPathidsFromUpgradeStage(stageRaw) {
+  const stage = Number(stageRaw);
+  if (!Number.isFinite(stage) || stage <= 0) return [];
+  const maxTierIdx = Math.max(0, Math.min(TIER_ORDER.length - 1, Math.floor(stage) - 1));
+  const out = [];
+  const rows = Array.isArray(props.detail?.traits) ? props.detail.traits : [];
+  for (const tr of rows) {
+    const pid = normalizeTraitPathid(tr?.pathid);
+    if (!pid) continue;
+    const src = String(tr?.source || "");
+    if (src === "HiddenUpgrades") {
+      out.push(pid);
+      continue;
+    }
+    if (src !== "Upgrades") continue;
+    const unlockTier = normalizeTierName(tr?.unlockTier || tr?.unlock_tier);
+    const unlockIdx = TIER_ORDER.indexOf(unlockTier);
+    if (unlockIdx < 0) continue;
+    if (unlockIdx <= maxTierIdx) out.push(pid);
+  }
+  return Array.from(new Set(out));
+}
+
+function normalizeArchiveEquippedParts(parts) {
+  const input = parts && typeof parts === "object" ? parts : {};
+  const bySlot = {
+    turbo: input.turbo ?? null,
+    ecu: input.ecu ?? null,
+    suspension: input.suspension ?? null,
+    tires: input.tires ?? null,
+  };
+  for (const slot of Object.keys(bySlot)) {
+    const eq = bySlot[slot];
+    if (!eq || typeof eq !== "object") continue;
+    const partRaw = eq?.part && typeof eq.part === "object" ? eq.part : eq;
+    const part = normalizedPartRecord(partRaw, slot);
+    const levelsRaw = Array.isArray(eq.breakthroughLevels) ? eq.breakthroughLevels : [eq.breakthroughLevel, eq.breakthroughLevel];
+    const levels = [0, 1].map((idx) => {
+      const v = Number(levelsRaw[idx] ?? levelsRaw[0] ?? 1);
+      return Number.isFinite(v) && v > 0 ? Math.floor(v) : 1;
+    });
+    bySlot[slot] = {
+      ...eq,
+      part,
+      breakthroughLevels: levels,
+      breakthroughLevel: levels[0],
+    };
+  }
+  return bySlot;
+}
+
+function resolveArchiveSkinForCurrentCar(rawSkinId) {
+  const wanted = String(rawSkinId || "").trim();
+  if (!wanted) return { skinId: "", isDefault: false };
+  const list = Array.isArray(skins.value) ? skins.value : [];
+  if (!list.length) return { skinId: "", isDefault: false };
+
+  const exact = list.find((s) => String(s?.id || "") === wanted);
+  if (exact) return { skinId: String(exact.id), isDefault: Boolean(exact?.isDefault) };
+
+  const wantedUpper = wanted.toUpperCase();
+  const ci = list.find((s) => String(s?.id || "").toUpperCase() === wantedUpper);
+  if (ci) return { skinId: String(ci.id), isDefault: Boolean(ci?.isDefault) };
+
+  const skNoMatch = wantedUpper.match(/_SK(\d+)$/);
+  if (skNoMatch) {
+    const skNo = Number(skNoMatch[1]);
+    if (Number.isFinite(skNo) && skNo >= 0) {
+      const suffix = `_SK${Math.floor(skNo)}`;
+      const bySuffix = list.find((s) => String(s?.id || "").toUpperCase().endsWith(suffix));
+      if (bySuffix) return { skinId: String(bySuffix.id), isDefault: Boolean(bySuffix?.isDefault) };
+    }
+  }
+
+  return { skinId: "", isDefault: false };
+}
+
+function applyArchiveCarConfig(carCfg) {
+  if (!carCfg || typeof carCfg !== "object") return;
+  const lv = Number(carCfg.level);
+  if (Number.isFinite(lv) && lv > 0) level.value = Math.max(1, Math.min(30, Math.floor(lv)));
+  const targetTier = String(carCfg.tier || "").toUpperCase();
+  if (targetTier && availableTierOptions.value.includes(targetTier)) tier.value = targetTier;
+  let skinBonusResolved = false;
+  if (typeof carCfg.includeSkinBonus === "boolean") {
+    includeSkinBonus.value = carCfg.includeSkinBonus;
+    skinBonusResolved = true;
+  }
+  const skinId = String(carCfg.selectedSkinId || "").trim();
+  if (skinId) {
+    const picked = resolveArchiveSkinForCurrentCar(skinId);
+    if (picked.skinId) {
+      selectedSkinId.value = picked.skinId;
+      if (!skinBonusResolved) includeSkinBonus.value = !picked.isDefault;
+      skinBonusResolved = true;
+    } else if (!skinBonusResolved) {
+      // Archive says an equipped skin exists, but this client cannot map that skin id.
+      // Keep bonus enabled while UI falls back to default skin card.
+      includeSkinBonus.value = true;
+      skinBonusResolved = true;
+    }
+  }
+  if (!skinBonusResolved && !selectedSkin.value?.isDefault) {
+    includeSkinBonus.value = true;
+  }
+  const traitRows = Array.isArray(carCfg.selectedTraitPathids) ? carCfg.selectedTraitPathids : [];
+  if (traitRows.length) {
+    selectedTraitPathids.value = traitRows
+      .map((v) => normalizeTraitPathid(v))
+      .filter(Boolean);
+  }
+  const parts = carCfg.equippedParts && typeof carCfg.equippedParts === "object" ? carCfg.equippedParts : null;
+  if (parts) {
+    equippedParts.value = normalizeArchiveEquippedParts(parts);
+  }
+}
+
+async function syncGarageToDetailStub(options = {}) {
+  const silent = Boolean(options?.silent);
+  const carId = String(props.car?.id || "").trim().toUpperCase();
+  if (!props.archiveReadEnabled) {
+    if (!silent) cloudMsg.value = t("roster.detail.cloudMessages.enableArchiveReadFirst");
+    return false;
+  }
+  if (!carId) {
+    if (!silent) cloudMsg.value = t("roster.detail.cloudMessages.invalidCarId");
+    return false;
+  }
+  const garageMap = props.archiveGarageState && typeof props.archiveGarageState === "object" ? props.archiveGarageState : {};
+  const carCfg = getCurrentArchiveCarConfig();
+  const levelFromGarage = parseGarageCarLevel(garageMap, carId);
+  const upgradeStageFromGarage = parseGarageCarUpgradeStage(garageMap, carId);
+  if (!levelFromGarage) {
+    if (!silent) cloudMsg.value = t("roster.detail.cloudMessages.archiveMissingCar");
+    return false;
+  }
+  level.value = Math.max(1, Math.min(30, levelFromGarage));
+  applyArchiveCarConfig(carCfg);
+  // Cloud payload only gives upgrade stage (1=C ... 6=SSS), not explicit per-trait toggles.
+  // Apply stage-based trait selection so TRAITS MODULE reflects archive progression.
+  const stageTraitPathids = traitPathidsFromUpgradeStage(upgradeStageFromGarage);
+  const hiddenTraitPathids = (Array.isArray(props.detail?.traits) ? props.detail.traits : [])
+    .filter((tr) => String(tr?.source || "") === "HiddenUpgrades")
+    .map((tr) => normalizeTraitPathid(tr?.pathid))
+    .filter(Boolean);
+  const mergedTraitPathids = Array.from(new Set([...stageTraitPathids, ...hiddenTraitPathids]));
+  selectedTraitPathids.value = mergedTraitPathids;
+  traitInitCarId.value = String(carId || "");
+  archiveAppliedCarId.value = String(carId || "");
+  cloudMsg.value = t("roster.detail.cloudMessages.archiveSynced", {
+    level: levelFromGarage,
+    stage: upgradeStageFromGarage,
+    count: mergedTraitPathids.length,
+    source: isSelfArchiveData.value ? t("common.actions.self") : t("roster.detail.previewMode"),
+  });
+  return true;
+}
+
+watch(
+  () => props.car?.id,
+  () => {
+    mobileTuneCollapsed.value = true;
+    closeCloudPresetDropdown();
+    topbarActionsCollapsed.value = false;
+  },
+  { immediate: true },
+);
+
+watch(
+  [() => props.cloudToken, () => props.car?.id],
+  () => {
+    // Do not auto-apply cloud config on enter.
+    // Carlist detail must stay base preview unless user explicitly applies a preset.
+    void loadCloudPresets();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => props.detailSource,
+  (source) => {
+    const src = String(source || "carlist").toLowerCase();
+    if (src !== "carlist") return;
+    archiveAppliedCarId.value = "";
+    applyBasePreviewConfig();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => props.archiveReadEnabled,
+  (enabled) => {
+    if (enabled) return;
+    archiveAppliedCarId.value = "";
+    applyBasePreviewConfig();
+  },
+);
+
+watch(
+  [
+    () => props.archiveReadEnabled,
+    () => props.archiveGarageState,
+    () => props.car?.id,
+    () => props.detail,
+    () => props.archiveAutoSync,
+    () => props.archiveSyncSeq,
+  ],
+  async ([enabled]) => {
+    if (!enabled) return;
+    await nextTick();
+    syncGarageToDetailStub({ silent: false });
+  },
+  { immediate: true, deep: true },
+);
+
+watch(
+  () => isVisitorReadOnly.value,
+  (readonly) => {
+    if (!readonly) return;
+    closePartModal();
+    closeBreakthroughMenus();
+    closeCloudPresetDropdown();
+  },
+);
+
+const detailOverlayScrollLockOwner = "roster-car-detail";
+
+watch(
+  [() => Boolean(modalPartType.value), () => Boolean(isDrawerOpen.value)],
+  ([partOpen, drawerOpen]) => {
+    syncBodyScrollLock(detailOverlayScrollLockOwner, Boolean(partOpen || drawerOpen));
+  },
+  { immediate: true },
+);
+
+onMounted(() => {
+  syncDetailViewport();
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    window.addEventListener("resize", syncDetailViewport, { passive: true });
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    document.addEventListener("keydown", handleDocumentKeydown);
+  }
+});
+
+onBeforeUnmount(() => {
+  unlockBodyScroll(detailOverlayScrollLockOwner);
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    window.removeEventListener("resize", syncDetailViewport);
+    document.removeEventListener("pointerdown", handleDocumentPointerDown);
+    document.removeEventListener("keydown", handleDocumentKeydown);
+  }
+});
+</script>
+
+<template>
+  <section class="wiki-detail-app" :class="[rankClass, { 'is-visitor-readonly': isVisitorReadOnly }]">
+    <section ref="cloudPresetDropdownRef" class="detail-topbar-shell">
+      <header class="detail-topbar hs-ui-surface" :class="{ 'is-actions-collapsed': topbarActionsCollapsed }">
+        <div class="detail-topbar__actions">
+          <button type="button" class="btn-back-top" @click="emit('back')">
+            <span class="btn-back-top__arrow">◀</span>
+            <span>{{ t("roster.detail.backToList") }}</span>
+          </button>
+          <button type="button" class="topbar-collapse-btn" @click="toggleTopbarActionsCollapsed">
+            <span>{{ topbarActionsCollapsed ? t("roster.detail.expand") : t("roster.detail.collapse") }}</span>
+          </button>
+          <template v-if="!topbarActionsCollapsed">
+            <button type="button" class="btn-drawer-top" @click="isDrawerOpen = true">
+              <span class="btn-drawer-top__main">{{ t("roster.detail.sourceDetail") }}</span>
+              <!-- <span class="btn-drawer-top__sub">DECONSTRUCTION</span> -->
+            </button>
+            <label v-if="canUseCloudPresetTools" class="archive-toggle">
+              <input type="checkbox" :checked="archiveReadEnabled" @change="onToggleArchiveRead" />
+              <span>{{ t("roster.detail.archiveRead") }}</span>
+            </label>
+            <button
+              v-if="canUseCloudPresetTools && cloudUser"
+              type="button"
+              class="topbar-preset-trigger"
+              :class="{ 'is-open': cloudPresetDropdownOpen }"
+              @click.stop="toggleCloudPresetDropdown"
+            >
+              <span>{{ t("roster.detail.cloudPresetCount", { count: cloudPresets.length, max: MAX_PRESETS_PER_CAR }) }}</span>
+              <span class="topbar-preset-trigger__arrow">{{ cloudPresetDropdownOpen ? "▴" : "▾" }}</span>
+            </button>
+          </template>
+        </div>
+        <div v-if="!topbarActionsCollapsed" class="detail-topbar__status">
+          <p class="detail-topbar__meta">{{ carPrimaryName }} ｜ {{ archiveStateText }}</p>
+          <p v-if="visitorTargetPlayerId" class="detail-topbar__meta detail-topbar__meta--visitor">
+            {{ visitorPreviewTopbarText }}
+          </p>
+        </div>
+      </header>
+      <section
+        v-if="canUseCloudPresetTools && cloudUser && cloudPresetDropdownOpen && !topbarActionsCollapsed"
+        class="topbar-preset-dropdown hs-ui-surface"
+        @click.stop
+      >
+        <p class="cloud-bar__user">{{ t("roster.detail.cloudUser", { name: cloudUser.displayName, id: cloudUser.id }) }}</p>
+        <div class="cloud-bar__actions">
+          <input v-model="cloudPresetName" class="cloud-input" type="text" :placeholder="t('roster.detail.presetNamePlaceholder')" />
+          <button type="button" class="cloud-btn" :disabled="cloudBusy" @click="saveAsCloudPreset">{{ t("roster.detail.saveAsPreset") }}</button>
+          <div class="cloud-select-wrap">
+            <select v-model="selectedCloudPresetId" class="cloud-select">
+              <option value="">{{ t("roster.detail.selectPreset") }}</option>
+              <option v-for="p in cloudPresets" :key="p.id" :value="String(p.id)">{{ p.name }}</option>
+            </select>
+            <span class="cloud-select-arrow" aria-hidden="true">▾</span>
+          </div>
+          <button type="button" class="cloud-btn" @click="applySelectedPreset">{{ t("roster.detail.applyPreset") }}</button>
+        </div>
+        <div v-if="cloudPresets.length" class="cloud-preset-list">
+          <div v-for="p in cloudPresets" :key="`cloud-preset-${p.id}`" class="cloud-preset-item">
+            <button type="button" class="cloud-preset-name" @click="applyPresetById(p.id)">
+              {{ p.name || t("roster.detail.presetFallback", { id: p.id }) }}
+            </button>
+            <button type="button" class="cloud-preset-remove" :disabled="cloudBusy" @click="removeCloudPreset(p.id)">×</button>
+          </div>
+        </div>
+        <p v-if="cloudMsg" class="cloud-bar__msg">{{ cloudMsg }}</p>
+      </section>
+    </section>
+
+    <div v-if="detailLoading" class="hs-ui-surface loading-panel anim-fade-up">
+      <div class="hs-loading-stack">
+        <div class="hs-loading-inline">
+            <span class="hs-loading-wheel"></span>
+            <span>{{ t("roster.detail.loading") }}</span>
+        </div>
+        <div class="hs-loader-card anim-zoom-in">
+          <span class="hs-loader-arrows"><i></i><i></i><i></i></span>
+          <span>Loading Detail</span>
+          <span class="hs-loading-wheel"></span>
+        </div>
+      </div>
+    </div>
+
+    <div v-else-if="detail" class="detail-grid">
+      <aside class="area-showcase">
+        <button
+          v-if="isVisitorDetailSource"
+          type="button"
+          class="visitor-owner-card visitor-owner-card--inline hs-ui-surface"
+          :class="{ 'is-pending': visitorOwnerCardPending, 'is-clickable': visitorOwnerCardClickable }"
+          :disabled="!visitorOwnerCardClickable"
+          @click="openVisitorOwnerProfile"
+        >
+          <div class="visitor-owner-card__eyebrow">{{ t("roster.detail.visitorPreview") }}</div>
+          <div class="visitor-owner-card__main">
+            <UserAvatar
+              :src="visitorOwnerAvatarUrl"
+              :alt="visitorOwnerDisplayName"
+              :title="visitorOwnerPrimaryTitle"
+              :size="60"
+              class="visitor-owner-card__avatar"
+            />
+            <div class="visitor-owner-card__copy">
+              <div class="visitor-owner-card__title-row">
+                <strong class="wiki-display-name" :class="displayNameClass(visitorProfile || {})" :style="displayNameStyle(visitorProfile || { displayName: visitorOwnerDisplayName })">{{ visitorOwnerDisplayName }}</strong>
+                <span
+                  v-if="visitorOwnerPrimaryTitle"
+                  class="title-tag visitor-owner-card__title-tag"
+                  :class="titleClassName(visitorOwnerPrimaryTitle)"
+                  :style="titleInlineStyle(visitorOwnerPrimaryTitle)"
+                >
+                  {{ visitorOwnerPrimaryTitle }}
+                </span>
+              </div>
+              <p class="visitor-owner-card__desc">{{ visitorPreviewCardText }}</p>
+              <p class="visitor-owner-card__meta">{{ visitorOwnerPlayerIdText }}</p>
+              <p v-if="visitorOwnerSignatureSummary" class="visitor-owner-card__signature">{{ t("roster.detail.signature", { value: visitorOwnerSignatureSummary }) }}</p>
+            </div>
+          </div>
+        </button>
+        <section class="media-panel hs-ui-surface" :class="[detailRankVisualClass, { 'media-panel--limited-skin': isSelectedSkinLimited }]">
+          <div class="bg-stripes"></div>
+          <div class="watermark">{{ car.initialRank }}</div>
+          <div v-if="showcaseCardLabel" class="info-header-label media-panel-label" :class="`is-${showcaseCardLabel.variant}`">
+            <img
+              v-if="showcaseCardLabel.variant === 'legendary'"
+              :src="legendaryTypeIconUrl"
+              :alt="t('roster.card.legendaryAlt')"
+              class="info-header-label-icon"
+              loading="lazy"
+              @error="(event) => reportDetailAssetFailure('detail-legendary-icon', event, 'hero-label-icon')"
+            />
+            <img
+              v-else-if="showcaseCardLabel.variant === 'limited-skin'"
+              :src="limitedIconUrl"
+              :alt="t('roster.detail.limitedSkinAlt')"
+              class="info-header-label-icon info-header-label-icon--limited"
+              loading="lazy"
+              @error="(event) => reportDetailAssetFailure('detail-limited-icon', event, 'hero-label-icon')"
+            />
+            <span v-else>{{ showcaseCardLabel.text }}</span>
+          </div>
+
+          <div class="car-stage">
+            <img :key="selectedSkinImageKey" :src="selectedSkinImageSrc" :alt="carPrimaryName" class="car-img" @error="onMainImageError" />
+          </div>
+
+          <div class="info-header">
+            <div class="info-header-layout">
+              <div class="info-header-main">
+                <div class="info-header-top">
+                  <div class="info-header-text">
+                    <h1 class="car-title">{{ carPrimaryName }}</h1>
+                    <p class="car-id">{{ carSecondaryName }}</p>
+                  </div>
+                </div>
+                <div class="info-bottom-row">
+                  <div class="tags-wrap">
+                    <div class="tag-item"><span>{{ typeLabel(car.type) }}</span></div>
+                    <div class="tag-item"><span>{{ t("roster.detail.rank", { rank: car.initialRank }) }}</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="info-header-side">
+                <div class="parts-quad">
+                  <button
+                    v-for="slot in partSlotDefs"
+                    :key="slot.key"
+                    class="part-quad-item"
+                    :class="{ 'is-filled': equippedParts[slot.key] }"
+                    :style="slotStyle(equippedParts[slot.key])"
+                    :disabled="isVisitorReadOnly"
+                    :title="partSlotLabel(slot.key)"
+                    :aria-label="t('roster.detail.partAriaLabel', { label: partSlotLabel(slot.key) })"
+                    @click="openPartModal(slot.key)"
+                  >
+                    <div class="part-slot">
+                      <img
+                        v-if="equippedParts[slot.key]?.part?.image"
+                        :src="partImageSrc(equippedParts[slot.key].part)"
+                        :alt="equippedParts[slot.key].part.displayNameZh || equippedParts[slot.key].part.name"
+                        class="part-slot-thumb"
+                        @error="(event) => onPartImageError(event, equippedParts[slot.key].part, 'equipped-part-image', slot.key)"
+                      />
+                      <span v-else class="part-icon">{{ equippedParts[slot.key] ? slot.icon : "+" }}</span>
+                    </div>
+                    <div class="part-label"><span>{{ partSlotLabel(slot.key) }}</span></div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="skins-panel hs-ui-surface">
+          <header class="hud-head">
+            <div>
+              <p>{{ t("roster.detail.skinsEyebrow") }}</p>
+              <strong>{{ t("roster.detail.skinsTitle") }}</strong>
+            </div>
+            <button type="button" class="skins-expand-btn" @click="skinsExpanded = !skinsExpanded">
+              {{ skinsExpanded ? t("roster.detail.collapse") : t("roster.detail.expand") }}
+            </button>
+          </header>
+          <div class="skins-strip-wrap" :class="{ 'is-expanded': skinsExpanded }">
+            <button v-if="!skinsExpanded" type="button" class="skins-nav skins-nav-left" @click="scrollSkins('left')">◀</button>
+            <div ref="skinsScrollRef" class="skins-scroll" :class="{ 'is-expanded': skinsExpanded }">
+              <div class="skins-grid" :class="{ 'is-collapsed': !skinsExpanded }">
+                <button
+                  v-for="skin in skins"
+                  :key="skin.id"
+                  class="skin-btn"
+                  :class="{ 'is-active': String(skin.id) === String(selectedSkinId) }"
+                  :disabled="isVisitorReadOnly"
+                  @click="pickSkin(skin.id)"
+                >
+                  <div class="skin-btn__row">
+                    <div class="skin-btn__text">
+                      <strong>{{ skinDisplayName(skin) }}</strong>
+                      <span class="skin-btn__meta" :class="skinMetaClass(skin)">{{ skinMetaText(skin) }}</span>
+                    </div>
+                    <div class="skin-btn__media">
+                      <img class="skin-btn__preview" :src="assetSrc(skin.thumb || skin.image)" :alt="skinDisplayName(skin)" @error="(event) => onSkinPreviewError(event, skin)" />
+                      <span v-if="skinCatalogLabel(skin)" class="skin-catalog-badge" :class="`is-${skinCatalogLabel(skin).variant}`">
+                        <img
+                          v-if="skinCatalogLabel(skin).variant === 'limited'"
+                          :src="limitedIconUrl"
+                          :alt="t('roster.detail.limitedSkinAlt')"
+                          class="skin-catalog-badge-icon"
+                          loading="lazy"
+                          @error="(event) => reportDetailAssetFailure('skin-catalog-icon', event, String(skin.id || ''))"
+                        />
+                        <template v-else>{{ skinCatalogLabel(skin).text }}</template>
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+            <button v-if="!skinsExpanded" type="button" class="skins-nav skins-nav-right" @click="scrollSkins('right')">▶</button>
+          </div>
+        </section>
+      </aside>
+
+      <main class="area-tuning">
+        <section class="perf-panel hs-ui-surface data-card">
+          <header class="data-card-head perf-card-head">
+            <div class="data-card-title">
+              <h3>{{ t("roster.detail.performanceTitle") }}</h3>
+              <p>PERFORMANCE</p>
+            </div>
+            <div class="perf-right">
+              <span class="perf-score-label">{{ t("roster.detail.performanceLabel") }}</span>
+              <span class="perf-score">{{ totalPower }}</span>
+              <small class="perf-note">{{ t("roster.detail.performanceNote") }}</small>
+            </div>
+          </header>
+          <div class="data-card-body perf-card-body">
+            <div class="stats-grid">
+            <article v-for="row in mainFinalRows" :key="row.key" class="stat-block">
+              <div class="stat-head">
+                <span class="stat-name">{{ row.label }}</span>
+                <div>
+                  <span class="stat-val">{{ panelInt(row.final) }}</span>
+                  <span v-if="row.diffBase.absolute > 0" class="stat-diff">{{ row.diffBase.text }}</span>
+                </div>
+              </div>
+              <div class="stat-bar-bg">
+                <div class="stat-bar-fill" :style="{ width: barWidth(row.final) }"></div>
+              </div>
+            </article>
+
+            <div class="sub-stats-row">
+              <div v-for="row in subFinalRows" :key="row.key" class="sub-stat-pill">
+                <span>{{ row.label }}</span>
+                <b>{{ panelInt(row.final) }}</b>
+              </div>
+            </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="config-panel config-panel--tuning hs-ui-surface data-card">
+          <header class="data-card-head data-card-head--config">
+            <div class="data-card-title">
+              <h3>{{ t("roster.detail.tuningTitle") }}</h3>
+              <p>ECU TUNING</p>
+            </div>
+            <button type="button" class="config-mobile-toggle" @click="mobileTuneCollapsed = !mobileTuneCollapsed">
+              {{ mobileTuneCollapsed ? t("roster.detail.expandTuning") : t("roster.detail.collapseTuning") }}
+            </button>
+          </header>
+          <div class="data-card-body" :class="{ 'is-mobile-collapsed': mobileTuneCollapsed }">
+            <div class="config-row">
+            <div class="config-label">{{ t("roster.detail.rankConfig") }}</div>
+            <div class="tier-tabs">
+              <button
+                v-for="opt in availableTierOptions"
+                :key="opt"
+                class="tier-btn"
+                :class="{ active: opt === tier }"
+                :disabled="isVisitorReadOnly"
+                @click="setTier(opt)"
+              >
+                <span>{{ opt }}</span>
+              </button>
+            </div>
+            </div>
+
+            <div class="config-row">
+            <div class="config-label">{{ t("roster.detail.levelConfig") }}</div>
+            <div class="level-slider-wrap">
+              <input v-model.number="level" type="range" min="1" max="30" class="level-input" :disabled="isVisitorReadOnly" />
+              <div class="level-display"><span>{{ level }}</span></div>
+            </div>
+            </div>
+
+            <div class="config-row">
+            <div class="config-label">{{ t("roster.detail.quickPreset") }}</div>
+            <button type="button" class="preset-btn" :disabled="isVisitorReadOnly" @click="applyMaxPerformancePreset">
+              {{ t("roster.detail.maxPreset") }}
+            </button>
+            </div>
+
+            <div v-if="canUseCloudPresetTools" class="config-row">
+            <div class="config-label">{{ t("roster.detail.garageSync") }}</div>
+            <button type="button" class="preset-btn preset-btn--sync" :disabled="cloudBusy" @click="syncGarageToDetailStub">
+              {{ syncArchiveButtonText }}
+            </button>
+            </div>
+
+            <div class="config-row config-row-last">
+            <div class="config-label config-label-auto">{{ t("roster.detail.skinBonus") }}</div>
+            <label class="bonus-switch">
+              <input v-model="includeSkinBonus" type="checkbox" :disabled="isVisitorReadOnly" />
+              {{ t("roster.detail.skinBonusEnabled") }}
+            </label>
+            <p class="bonus-hint">
+              {{ includeSkinBonus ? t("roster.detail.skinBonusOn", { desc: skinContribution.sourceDesc }) : t("roster.detail.skinBonusOff") }}
+            </p>
+            </div>
+
+            <div v-if="isVisitorReadOnly" class="config-row config-row--readonly">
+              <p class="readonly-hint">{{ t("roster.detail.visitorReadonly") }}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="config-panel hs-ui-surface data-card">
+          <header class="data-card-head">
+            <div class="data-card-title">
+              <h3>{{ t("roster.detail.traitTitle") }}</h3>
+              <p>TRAITS MODULE</p>
+            </div>
+          </header>
+          <div class="data-card-body">
+            <div class="traits-grid">
+            <label
+              v-for="trait in traitViewRows"
+              :key="trait.pathid"
+              class="trait-label"
+              :class="{
+                'is-checked': selectedTraitSet.has(normalizeTraitPathid(trait.pathid)),
+                'is-forced': trait.source === 'HiddenUpgrades'
+              }"
+            >
+              <input
+                type="checkbox"
+                :checked="selectedTraitSet.has(normalizeTraitPathid(trait.pathid))"
+                :disabled="trait.source === 'HiddenUpgrades' || isVisitorReadOnly"
+                @change="onToggleTrait(trait.pathid)"
+              />
+              <div class="trait-check"></div>
+              <div class="trait-info">
+                <div class="trait-title">{{ trait.displayName }}</div>
+                <div class="trait-meta">
+                  <span>[{{ trait.sourceText }}]</span>
+                  <span v-if="trait.source !== 'HiddenUpgrades'">{{ t("roster.detail.traitUnlock", { tier: trait.unlockTierText }) }}</span>
+                  <span v-else class="forced">{{ t("roster.detail.traitForced") }}</span>
+                  <span v-if="trait.panelTag" class="trait-panel-tag">{{ trait.panelTag }}</span>
+                </div>
+                <div class="trait-desc">{{ displayTraitDesc(trait) }}</div>
+              </div>
+            </label>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <div v-else class="hs-ui-surface loading-panel">
+      <h2>{{ t("roster.detail.missingTitle") }}</h2>
+      <p>{{ t("roster.detail.missingDesc") }}</p>
+    </div>
+
+    <Teleport to="body">
+      <div class="drawer-overlay" :class="{ 'is-open': isDrawerOpen }" @click="isDrawerOpen = false"></div>
+      <aside class="drawer-panel" :class="{ 'is-open': isDrawerOpen }">
+        <header class="drawer-head">
+          <div>
+            <h2>{{ t("roster.detail.breakdownTitle") }}</h2>
+            <p>{{ t("roster.detail.breakdownEyebrow") }}</p>
+          </div>
+          <button class="btn-close" @click="isDrawerOpen = false"><span>X</span></button>
+        </header>
+        <div class="drawer-body">
+          <section v-for="group in breakdownGroups" :key="group.key" class="bd-group">
+            <header class="bd-group-head">
+              <h4>{{ group.title }}</h4>
+              <b>{{ fmtSigned(group.summary?.absolute) }} / {{ fmtSignedPct(group.summary?.percent) }}</b>
+            </header>
+            <div v-for="(row, idx) in group.rows" :key="idx" class="bd-row">
+              <span class="bd-key">{{ row.label }}</span>
+              <span class="bd-val">{{ fmtSigned(row.computed) }}</span>
+              <span class="bd-note">{{ row.note }} <br v-if="row.trigger" /> {{ row.trigger }}</span>
+            </div>
+            <p v-if="!group.rows.length" class="bd-empty">{{ t("roster.detail.breakdownEmpty") }}</p>
+          </section>
+        </div>
+      </aside>
+
+      <div class="part-modal-overlay hs-ui-modal-overlay" :class="{ 'is-open': modalPartType }">
+        <div class="part-modal" v-if="modalPartType">
+          <header class="modal-head">
+            <div>
+              <h2>{{ t("roster.detail.partModal.title") }}</h2>
+              <span>{{ t("roster.detail.partModal.subtitle", { part: partSlotLabel(modalPartType) }) }}</span>
+            </div>
+            <button class="btn-close-modal" @click="closePartModal">×</button>
+          </header>
+          <div class="modal-body" :class="{ 'is-mobile-list': isMobileDetail && showMobilePartList, 'is-mobile-detail': isMobileDetail && !showMobilePartList }">
+            <div v-show="!isMobileDetail || showMobilePartList" class="part-list-side">
+              <div class="grade-tabs">
+                <button
+                  v-for="g in PART_GRADE_FILTERS"
+                  :key="g"
+                  class="grade-tab"
+                  :class="{ active: modalGrade === g }"
+                  :style="gradeTabStyle(g)"
+                  @click="modalGrade = g"
+                >
+                  {{ g === "ALL" ? t("roster.detail.partModal.allGrades") : g }}
+                </button>
+              </div>
+              <div class="part-items">
+                <button
+                  v-for="p in availablePartsForModal"
+                  :key="p.id"
+                  class="part-item-btn"
+                  :class="{ active: modalSelectedPart?.id === p.id }"
+                  :style="partVisualStyle(p)"
+                  @click="selectPartInModal(p)"
+                >
+                  <img
+                    v-if="p.image"
+                    :src="partImageSrc(p)"
+                    :alt="partDisplayName(p)"
+                    class="p-thumb"
+                    @error="(event) => onPartImageError(event, p, 'part-list-image', String(p.id || p.name || ''))"
+                  />
+                  <div v-else class="p-icon">{{ partIcons[modalPartType] }}</div>
+                  <div class="p-name-wrap">
+                    <div class="p-name">{{ partDisplayName(p) }}</div>
+                    <div class="p-sub">
+                      <span class="p-tag p-tag-grade">{{ partGradeLabel(p.grade) }}</span>
+                      <span class="p-tag p-tag-type">{{ partVariantLabel(p.variant) }}</span>
+                    </div>
+                  </div>
+                </button>
+                <div v-if="!availablePartsForModal.length" class="part-empty-tip">{{ t("roster.detail.partModal.noParts") }}</div>
+              </div>
+            </div>
+            <div v-show="!isMobileDetail || !showMobilePartList" class="part-detail-side" @click="closeBreakthroughMenus">
+              <template v-if="modalSelectedPart">
+                <div class="part-detail-scroll">
+                  <button v-if="isMobileDetail" type="button" class="part-mobile-back" @click="showPartListInModal">
+                    {{ t("roster.detail.backToList") }}
+                  </button>
+                  <div class="detail-top">
+                    <div class="detail-icon-big" :style="partVisualStyle(modalSelectedPart)">
+                      <img
+                        v-if="modalSelectedPart.image"
+                        :src="partImageSrc(modalSelectedPart)"
+                        :alt="partDisplayName(modalSelectedPart)"
+                        class="detail-thumb"
+                        @error="(event) => onPartImageError(event, modalSelectedPart, 'part-detail-image', String(modalSelectedPart.id || modalSelectedPart.name || ''))"
+                      />
+                      <span v-else>{{ partIcons[modalPartType] }}</span>
+                    </div>
+                    <div class="detail-title">
+                      <h3>{{ partDisplayName(modalSelectedPart) }}</h3>
+                      <div class="badge" :style="partVisualStyle(modalSelectedPart)">
+                        <span class="badge-tag badge-tag-grade">{{ partGradeLabel(modalSelectedPart.grade) }}</span>
+                        <span class="badge-tag badge-tag-type">{{ partVariantLabel(modalSelectedPart.variant) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="stats-block" :style="partVisualStyle(modalSelectedPart)">
+                    <h4>{{ t("roster.detail.partModal.allEffects") }}</h4>
+                    <div v-for="e in partEffectsByKeys(modalSelectedPart, ALL_KEYS)" :key="`${e.pathid}-all`" class="stat-line">
+                      <span>{{ metaLabel(e.key) || e.labelZh }}</span>
+                      <b>{{ fmtPartEffect(e) }}</b>
+                    </div>
+                    <div v-if="!partEffectsByKeys(modalSelectedPart, ALL_KEYS).length" class="stat-line">
+                      <span>{{ t("roster.detail.partModal.none") }}</span>
+                      <b>0</b>
+                    </div>
+                  </div>
+                  <div class="stats-block" style="--part-color: var(--wiki-rank-b); --part-color-alt: var(--wiki-rank-b-2);">
+                    <h4>{{ t("roster.detail.partModal.breakthroughTitle") }}</h4>
+                    <template v-if="isCustomizableSPart(modalSelectedPart)">
+                      <p class="part-tip">{{ t("roster.detail.partModal.breakthroughHint") }}</p>
+                      <p v-if="modalReadonlyBreakthroughRows.length" class="part-tip part-tip--warning">
+                        {{ t("roster.detail.partModal.readonlyImportedHint") }}
+                      </p>
+                      <div class="custom-select-wrap">
+                        <div class="custom-select-shell">
+                          <span>{{ t("roster.detail.partModal.slotOne") }}</span>
+                          <div class="custom-dropdown" @click.stop>
+                            <button type="button" class="custom-dropdown-trigger" @click="toggleBreakthroughMenu('slot1', $event)">
+                              <span>{{ breakthroughValueLabel(modalBreakthrough1, 'slot1') }}</span>
+                              <span class="custom-dropdown-arrow">▾</span>
+                            </button>
+                            <div
+                              v-if="activeBreakthroughMenu === 'slot1'"
+                              class="custom-dropdown-menu"
+                              :class="{ 'is-up': breakthroughMenuPlacement.slot1 === 'up' }"
+                            >
+                              <button
+                                type="button"
+                                class="custom-dropdown-option"
+                                :class="{ 'is-active': !String(modalBreakthrough1 || '') }"
+                                @click="chooseBreakthrough('slot1', '')"
+                              >
+                                {{ t("roster.detail.partModal.none") }}
+                              </button>
+                              <button
+                                v-for="opt in breakthroughOptionsForSlot('slot1')"
+                                :key="`b1-${opt.pathid}`"
+                                type="button"
+                                class="custom-dropdown-option"
+                                :class="{ 'is-active': String(modalBreakthrough1) === String(opt.pathid) }"
+                                @click="chooseBreakthrough('slot1', String(opt.pathid))"
+                              >
+                                {{ breakthroughOptionLabel(opt, modalBreakthroughLevel1) }}
+                              </button>
+                            </div>
+                          </div>
+                          <div class="breakthrough-level-row breakthrough-level-row-inline">
+                            <span>{{ t("roster.detail.partModal.slotOneLevel") }}</span>
+                            <div class="breakthrough-level-tabs">
+                            <button
+                              v-for="lv in [1, 2, 3, 4]"
+                              :key="`bt-lv-1-${lv}`"
+                              type="button"
+                              class="breakthrough-level-btn"
+                              :class="{ active: modalBreakthroughLevel1 === lv }"
+                              @click="modalBreakthroughLevel1 = lv"
+                            >
+                              {{ t("roster.detail.partModal.levelTier", { level: lv }) }}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="custom-select-shell">
+                        <span>{{ t("roster.detail.partModal.slotTwo") }}</span>
+                        <div class="custom-dropdown" @click.stop>
+                          <button type="button" class="custom-dropdown-trigger" @click="toggleBreakthroughMenu('slot2', $event)">
+                            <span>{{ breakthroughValueLabel(modalBreakthrough2, 'slot2') }}</span>
+                            <span class="custom-dropdown-arrow">▾</span>
+                          </button>
+                          <div
+                            v-if="activeBreakthroughMenu === 'slot2'"
+                            class="custom-dropdown-menu"
+                            :class="{ 'is-up': breakthroughMenuPlacement.slot2 === 'up' }"
+                          >
+                            <button
+                              type="button"
+                              class="custom-dropdown-option"
+                              :class="{ 'is-active': !String(modalBreakthrough2 || '') }"
+                              @click="chooseBreakthrough('slot2', '')"
+                            >
+                              {{ t("roster.detail.partModal.none") }}
+                            </button>
+                            <button
+                              v-for="opt in breakthroughOptionsForSlot('slot2')"
+                              :key="`b2-${opt.pathid}`"
+                              type="button"
+                              class="custom-dropdown-option"
+                              :class="{ 'is-active': String(modalBreakthrough2) === String(opt.pathid) }"
+                              @click="chooseBreakthrough('slot2', String(opt.pathid))"
+                            >
+                              {{ breakthroughOptionLabel(opt, modalBreakthroughLevel2) }}
+                            </button>
+                          </div>
+                        </div>
+                        <div class="breakthrough-level-row breakthrough-level-row-inline">
+                          <span>{{ t("roster.detail.partModal.slotTwoLevel") }}</span>
+                          <div class="breakthrough-level-tabs">
+                            <button
+                              v-for="lv in [1, 2, 3, 4]"
+                              :key="`bt-lv-2-${lv}`"
+                              type="button"
+                              class="breakthrough-level-btn"
+                              :class="{ active: modalBreakthroughLevel2 === lv }"
+                              @click="modalBreakthroughLevel2 = lv"
+                            >
+                              {{ t("roster.detail.partModal.levelTier", { level: lv }) }}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-for="(e, idx) in modalSelectedBreakthroughRows" :key="`picked-${idx}-${e.pathid}`" class="stat-line stat-line--breakthrough">
+                      <span class="stat-line-main">
+                        <span>{{ metaLabel(e.key) || e.labelZh }}</span>
+                      </span>
+                      <b>{{ fmtPartEffect(e) }}</b>
+                    </div>
+                    <div
+                      v-for="(e, idx) in modalReadonlyBreakthroughRows"
+                      :key="`readonly-picked-${idx}-${e.pathid}-${e.breakthroughLevel}`"
+                      class="stat-line stat-line--breakthrough stat-line--readonly-import"
+                    >
+                      <span class="stat-line-main">
+                        <span>{{ metaLabel(e.key) || e.labelZh }}</span>
+                        <em class="readonly-breakthrough-badge">
+                          {{ e.isImportedOnly ? t("roster.detail.partModal.importedOnly") : t("roster.detail.partModal.duplicateSelection") }}
+                        </em>
+                      </span>
+                      <b>{{ fmtPartEffect(e) }}</b>
+                    </div>
+                    <div v-if="!modalSelectedBreakthroughRows.length" class="stat-line">
+                      <span>{{ t("roster.detail.partModal.currentBreakthrough") }}</span>
+                      <b>{{ t("roster.detail.partModal.empty") }}</b>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <p class="part-tip">{{ t("roster.detail.partModal.sOnlyHint") }}</p>
+                    <div class="stat-line">
+                      <span>{{ t("roster.detail.partModal.currentBreakthrough") }}</span>
+                      <b>{{ t("roster.detail.partModal.none") }}</b>
+                    </div>
+                  </template>
+                </div>
+              </div>
+              <div class="part-detail-footer">
+                <button class="btn-equip" :style="{ '--part-color': gradeColors[modalSelectedPart.grade] }" @click="equipPart">
+                  {{ t("roster.detail.partModal.equip") }}
+                </button>
+                <button v-if="equippedParts[modalPartType]" class="btn-unequip" @click="unequipPart">
+                  {{ t("roster.detail.partModal.unequip") }}
+                </button>
+              </div>
+            </template>
+            <div v-else class="detail-empty">{{ t("roster.detail.partModal.selectPart") }}</div>
+          </div>
+        </div>
+      </div>
+      </div>
+    </Teleport>
+  </section>
+</template>
+
+<style scoped src="@/styles/car-detail.css"></style>
+
