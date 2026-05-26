@@ -18,5 +18,6 @@ M.AnimModal     = require("scripts/UIKit/AnimModal")
 M.StaggerReveal = require("scripts/UIKit/StaggerReveal")
 M.SpringButton  = require("scripts/UIKit/SpringButton")
 M.RollingNumber = require("scripts/UIKit/RollingNumber")
+M.Theme         = require("scripts/UIKit/Theme")
 
 return M

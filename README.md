@@ -5,10 +5,19 @@
 
 ---
 
+## 预览
+
+<img src="assets/image/preview_hotslide.png" width="320" alt="HotSlide 车辆详情页预览" />
+
+深色深海配色 · 金色强调 · 折角卡片 · 点阵纹理底纹 · Barlow Condensed 数字字体
+
+---
+
 ## 组件一览
 
 | 组件 | 文件 | 用途 |
 |------|------|------|
+| `Theme` | `UIKit/Theme.lua` | 设计 Token（颜色/字体/间距/组件预设） |
 | `AnimModal` | `UIKit/AnimModal.lua` | 弹窗动画（遮罩淡入 + 卡片弹入分离） |
 | `StaggerReveal` | `UIKit/StaggerReveal.lua` | 多卡片错开入场动画 |
 | `SpringButton` | `UIKit/SpringButton.lua` | 按钮弹簧回弹效果 |
@@ -25,6 +34,7 @@
 ```
 your-project/scripts/
   UIKit/
+    Theme.lua
     AnimModal.lua
     StaggerReveal.lua
     SpringButton.lua
@@ -38,8 +48,10 @@ your-project/scripts/
 ```lua
 -- 统一引入
 local UIKit = require("scripts/UIKit")
+local Theme = UIKit.Theme
 
 -- 按需引入
+local Theme         = require("scripts/UIKit/Theme")
 local AnimModal     = require("scripts/UIKit/AnimModal")
 local StaggerReveal = require("scripts/UIKit/StaggerReveal")
 local SpringButton  = require("scripts/UIKit/SpringButton")
@@ -50,16 +62,105 @@ local RollingNumber = require("scripts/UIKit/RollingNumber")
 
 ## API 文档
 
-### AnimModal — 弹窗动画系统
+### Theme — 设计 Token
 
-遮罩层仅做 `opacity` 淡入淡出，弹窗卡片单独做 `scale + translateY` 弹入弹出，两层分离，避免遮罩随卡片一起缩放的视觉问题。
+统一管理 HotSlide 视觉风格的所有设计常量，新游戏引用时可直接使用，也可以 fork 后替换为自己的配色。
+
+#### 颜色
 
 ```lua
--- 初始化，传入宿主容器（弹窗挂载到哪个层）
-local modal = AnimModal.new(overlayLayer)
+local Theme = require("scripts/UIKit/Theme")
 
--- 打开弹窗
--- overlay = 全屏遮罩节点，card = 弹窗卡片节点（由业务代码创建）
+-- 背景色
+Theme.color.pageBg      -- {13, 20, 32, 255}    最深背景 #0d1420
+Theme.color.cardBg      -- {17, 27, 46, 255}    卡片背景 #111b2e
+Theme.color.headerBg    -- {24, 37, 53, 255}    区块头部
+
+-- 文字
+Theme.color.textPrimary -- {255, 255, 255, 255}  白色主文字
+Theme.color.textMuted   -- {68, 88, 110, 255}   蓝灰辅助文字
+
+-- 强调色
+Theme.color.accent      -- {255, 226, 58, 255}  金黄 #ffe23a
+Theme.color.accentBlue  -- {40, 185, 255, 255}  蓝色强调
+Theme.color.accentGreen -- {110, 234, 121, 255} 绿色强调
+
+-- NanoVG 用法示例
+nvgFillColor(vg, nvgRGBA(table.unpack(Theme.color.accent)))
+```
+
+#### Rank 品阶颜色
+
+```lua
+Theme.rankColor("S")  --> {255, 226, 58, 255}   金
+Theme.rankColor("A")  --> {201, 91, 255, 255}   紫
+Theme.rankColor("B")  --> {255, 174, 42, 255}   橙
+Theme.rankColor("C")  --> {34, 184, 255, 255}   蓝
+```
+
+#### Stat Bar 进度条配色
+
+```lua
+Theme.statBarColor(1)  --> 金黄（起步）
+Theme.statBarColor(2)  --> 蓝色（加速度）
+Theme.statBarColor(3)  --> 绿色（最高时速）
+Theme.statBarColor(4)  --> 金黄（操控）
+```
+
+#### 字体、字号、间距
+
+```lua
+-- 字体路径
+Theme.font.number    -- BarlowCondensed-Bold    数值专用
+Theme.font.label     -- Teko-Regular            英文标签
+Theme.font.body      -- MiSans-Regular          中文正文
+
+-- 字号基准
+Theme.fontSize.heroNumber   -- 48  大数值
+Theme.fontSize.sectionTitle -- 22  区块标题
+Theme.fontSize.body         -- 14  正文
+
+-- 圆角
+Theme.radius.card    -- 10
+Theme.radius.button  -- 6
+
+-- 间距
+Theme.spacing.pagePad   -- 16  页面左右内边距
+Theme.spacing.cardPad   -- 14  卡片内边距
+```
+
+#### 点阵纹理参数
+
+```lua
+-- DrawDotGrid 函数参数直接透传
+Theme.dotGrid.dotR   -- 1.0   点半径
+Theme.dotGrid.gap    -- 18    点间距
+Theme.dotGrid.color  -- {255, 255, 255, 12}  极低透明度白
+```
+
+#### 组件预设（直接传给 UIKit 各组件）
+
+```lua
+-- AnimModal 预设
+local modal = AnimModal.new(overlayLayer, Theme.modalPreset)
+
+-- StaggerReveal 预设
+StaggerReveal(cards, Theme.staggerPreset)
+
+-- SpringButton 预设
+SpringButton.wrap(btn, onClick, Theme.springPreset)
+```
+
+---
+
+### AnimModal — 弹窗动画系统
+
+遮罩层仅做 `opacity` 淡入淡出，弹窗卡片单独做 `scale + translateY` 弹入弹出，两层分离，避免遮罩随卡片缩放的视觉问题。
+
+```lua
+local modal = AnimModal.new(overlayLayer, Theme.modalPreset)
+
+-- 打开弹窗（overlay=全屏遮罩，card=弹窗卡片，由业务代码创建）
 modal:Open(overlay, card)
 
 -- 关闭弹窗（带动画，自动延迟移除节点）
@@ -69,7 +170,7 @@ modal:Close()
 modal:IsOpen()  --> boolean
 ```
 
-**全部配置项（均可选）：**
+**自定义配置：**
 
 ```lua
 AnimModal.new(overlayLayer, {
@@ -77,9 +178,9 @@ AnimModal.new(overlayLayer, {
     openCardT     = "scale 0.30s easeOutBack, translateY 0.28s easeOut",
     closeOverlayT = "opacity 0.22s easeOut",
     closeCardT    = "scale 0.20s easeIn, translateY 0.20s easeIn",
-    closeDelay    = 0.25,     -- 动画结束后移除节点的延迟（秒）
-    cardInitScale = 0.88,     -- 弹入前卡片的初始缩放
-    cardInitY     = 14,       -- 弹入前卡片的初始向下偏移（px）
+    closeDelay    = 0.25,
+    cardInitScale = 0.88,
+    cardInitY     = 14,
 })
 ```
 
@@ -90,14 +191,14 @@ AnimModal.new(overlayLayer, {
 传入 Panel 数组，自动依次触发淡入 + 向上位移入场。适合仪表盘、卡片列表的首次出现动画。
 
 ```lua
--- 最简用法（默认参数）
-StaggerReveal({ card1, card2, card3, card4 })
+-- 使用 Theme 预设
+StaggerReveal({ card1, card2, card3, card4 }, Theme.staggerPreset)
 
--- 自定义配置
+-- 或自定义
 StaggerReveal(cards, {
-    startDelay = 0.08,   -- 第一张触发前的延迟（秒）
-    interval   = 0.10,   -- 相邻卡片之间的间隔（秒）
-    initY      = 28,     -- 初始向下偏移量（px，入场前的位置）
+    startDelay = 0.08,
+    interval   = 0.10,
+    initY      = 28,
     transition = "opacity 0.40s easeOut, translateY 0.42s easeOutBack",
 })
 ```
@@ -106,23 +207,17 @@ StaggerReveal(cards, {
 
 ### SpringButton — 弹簧回弹按钮
 
-给任意 Widget 注入点击时的 scale 下压 → 弹回动画，无需修改原有类定义。
-
 ```lua
 -- 模式 A：包装已有 Widget（推荐，非侵入）
 SpringButton.wrap(existingWidget, function()
     -- 点击回调
-end)
+end, Theme.springPreset)
 
 -- 模式 B：直接创建带弹簧效果的新按钮
 local btn = SpringButton.new({
     text    = "确认",
     variant = "primary",
     onClick = function() ... end,
-    -- 可选：覆盖动画参数
-    pressScale   = 0.88,
-    pressEasing  = "scale 0.10s easeIn",
-    bounceEasing = "scale 0.30s easeOutBack",
 })
 ```
 
@@ -130,49 +225,89 @@ local btn = SpringButton.new({
 
 ### RollingNumber — 数字滚动计数器
 
-基于 `tween.lua` 驱动，适用于得分、金币、综合评分等数值的平滑过渡动画。
-
 ```lua
--- 创建计数器
 local counter = RollingNumber.new({
     initial  = 0,
     duration = 1.0,
     easing   = "outQuad",
-    format   = function(v) return tostring(math.floor(v)) end,  -- 可选，自定义格式
+    format   = function(v) return tostring(math.floor(v)) end,
 })
 
--- 每帧驱动（在 Update 事件中调用）
+-- 每帧驱动
 SubscribeToEvent("Update", function(et, ed)
     counter:Update(ed["TimeStep"]:GetFloat())
 end)
 
--- 触发滚动到新值
-counter:Set(594)
-
--- 立即跳到某值（不播动画）
-counter:Jump(0)
-
--- 读取当前显示值（字符串，供 Label 或 NanoVG 使用）
-counter:Get()   --> "312"
-
--- 读取当前原始浮点值
-counter:Raw()   --> 312.47
+counter:Set(594)   -- 触发滚动到新值
+counter:Jump(0)    -- 立即跳到（不播动画）
+counter:Get()      -- 读取当前显示值（string）
+counter:Raw()      -- 读取当前浮点值
 ```
 
-**与 NanoVG 配合（闭包驱动，无需手动刷新）：**
+---
 
-```lua
-local score = RollingNumber.new({ initial = 0 })
+## 示例提示词
 
--- NanoVGRender 事件里直接读，每帧自动更新
-function HandleNanoVGRender(et, ed)
-    nvgBeginFrame(vg, w, h, 1.0)
-    nvgText(vg, x, y, score:Get())
-    nvgEndFrame(vg)
-end
+以下提示词可直接用于向 AI 请求基于 UIKit 构建新页面：
 
--- 数值变化时触发滚动
-score:Set(newScore)
+### 示例一：游戏大厅页
+
+```
+我在用 UrhoX + Lua 做一个赛车游戏大厅页面，
+请参考 scripts/UIKit/ 组件库来实现，风格参考 HotSlide 示例（Theme.lua）。
+
+页面需求：
+- 顶部：玩家信息栏（头像占位、昵称、等级标签）
+- 中间：快速匹配大按钮
+- 中间：三个模式卡片（单人计时 / 多人竞速 / 团队赛）
+- 底部：导航栏（大厅 / 车库 / 商城 / 排行榜）
+
+UIKit 使用要求：
+- 页面卡片入场用 StaggerReveal（传入 Theme.staggerPreset）
+- 匹配按钮用 SpringButton.new（传入 Theme.springPreset）
+- 匹配倒计时用 RollingNumber
+- 弹出"匹配成功"用 AnimModal（传入 Theme.modalPreset）
+
+视觉参考 Theme.color / Theme.fontSize / Theme.spacing，
+点阵底纹参数用 Theme.dotGrid。
+```
+
+### 示例二：角色/英雄详情页
+
+```
+我在用 UrhoX + Lua 做一个 MOBA 游戏的英雄详情页，
+请参考 scripts/UIKit/ 组件库，风格沿用 HotSlide Theme。
+
+页面需求：
+- 顶部：英雄立绘展示区（全屏背景图 + 英雄名）
+- 属性面板：6项属性 + StatBar 进度条（参考 Theme.statBarColor）
+- 技能列表：4个技能卡片，点击弹出技能详情（用 AnimModal）
+- 皮肤切换：横向滚动缩略图行（参考 HotSlide skins.lua 结构）
+
+UIKit 使用要求：
+- 属性和技能卡片入场用 StaggerReveal
+- 技能详情弹窗用 AnimModal
+- 技能卡片点击用 SpringButton.wrap
+- Rank 品阶标签颜色用 Theme.rankColor
+```
+
+### 示例三：排行榜页
+
+```
+我在用 UrhoX + Lua 做排行榜页面，
+请参考 scripts/UIKit/ 组件库，风格沿用 HotSlide Theme。
+
+页面需求：
+- 顶部 Tab：全服榜 / 好友榜（切换用 SpringButton.wrap）
+- 排名列表：前 3 名特殊样式，4-10 名标准行
+- 当前玩家行：固定在底部，分数用 RollingNumber 动画更新
+- 刷新按钮：点击后数值重新滚动到新成绩
+
+UIKit 使用要求：
+- 列表卡片入场用 StaggerReveal
+- Tab 按钮用 SpringButton.wrap
+- 分数用 RollingNumber（duration=1.2, easing="outQuad"）
+- 颜色全部取 Theme.color.*，字体取 Theme.font.*
 ```
 
 ---
@@ -184,38 +319,21 @@ score:Set(newScore)
 ```
 scripts/
   UIKit/                   ← 组件库（本体，可直接复制复用）
-    AnimModal.lua
-    StaggerReveal.lua
-    SpringButton.lua
-    RollingNumber.lua
-    init.lua
+  tween.lua                ← 缓动引擎（UIKit 依赖）
 
-  tween.lua                ← 缓动引擎（UIKit 依赖，一并复制）
-
-  main.lua                 ← 示例入口（~80 行，演示 AnimModal + StaggerReveal）
+  main.lua                 ← 示例入口（演示 AnimModal + StaggerReveal）
   state.lua                ← 响应式状态（零件换装 → 属性联动）
-  constants.lua            ← 颜色系统 + 数据
+  constants.lua            ← 数据常量（颜色已迁移至 UIKit/Theme.lua）
   helpers.lua              ← 布局工厂（MakeCard / MakeCardHeader 等）
-  widgets.lua              ← NanoVG 自定义控件（SurfacePanel / StatBar 等）
+  widgets.lua              ← NanoVG 自定义控件（SurfacePanel / StatBar / DrawDotGrid）
 
   sections/
-    topbar.lua             ← 顶部导航栏
-    showcase.lua           ← 车辆展示 + 槽位点击
-    skins.lua              ← 涂装切换（演示 SpringButton.wrap）
-    performance.lua        ← 性能评估（演示 RollingNumber）
-    tuning.lua             ← 构筑调校（演示 SpringButton.wrap）
-    traits.lua             ← 特性词条
-    parts_modal.lua        ← 零件选择弹窗（演示 AnimModal，返回 overlay, card）
-    parts_quad.lua         ← 2×N 零件卡片网格
-
-assets/
-  Fonts/                   ← BarlowCondensed / Teko / MiSans / NotoSansSC
-  image/                   ← 车辆图片 + UI 贴图
+    performance.lua        ← 演示 RollingNumber
+    tuning.lua             ← 演示 SpringButton.wrap
+    skins.lua              ← 演示 SpringButton.wrap（涂装切换）
+    parts_modal.lua        ← 演示 AnimModal（返回 overlay, card 两个值）
+    ...
 ```
-
-### 示例视觉风格
-
-深色深海配色 · 金色强调 · 折角卡片 · 点阵纹理底纹 · Barlow/Teko 数字字体
 
 ---
 
